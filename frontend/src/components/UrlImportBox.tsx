@@ -1,0 +1,70 @@
+import { FormEvent, useState } from "react";
+import { Link2, Loader2, Send } from "lucide-react";
+
+import { getApiError } from "../api/client";
+import { createUrlJob, type JobOptions } from "../api/jobs";
+
+type Props = {
+  options: JobOptions;
+  onCreated: (jobId: string) => void;
+};
+
+export default function UrlImportBox({ options, onCreated }: Props) {
+  const [url, setUrl] = useState("");
+  const [isSubmitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await createUrlJob({
+        url,
+        language: options.language,
+        enable_diarization: options.enableDiarization,
+        enable_translation: options.enableTranslation,
+      });
+      onCreated(response.job_id);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-950">URL 导入</h2>
+          <p className="mt-1 text-sm text-slate-500">YouTube, podcast RSS, embedded public media</p>
+        </div>
+        <Link2 className="text-cyan-600" size={22} aria-hidden="true" />
+      </div>
+
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-slate-700">链接</span>
+        <input
+          className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+          type="url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="https://www.youtube.com/watch?v=..."
+          required
+        />
+      </label>
+
+      {error ? <p className="mt-3 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
+
+      <button
+        className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        type="submit"
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? <Loader2 className="animate-spin" size={16} aria-hidden="true" /> : <Send size={16} aria-hidden="true" />}
+        创建 URL 任务
+      </button>
+    </form>
+  );
+}

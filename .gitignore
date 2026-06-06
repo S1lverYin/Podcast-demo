@@ -1,0 +1,15 @@
+.env
+.DS_Store
+logs/
+
+backend/storage/
+backend/.venv/
+backend/**/__pycache__/
+backend/**/*.pyc
+
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
