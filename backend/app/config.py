@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     paragraphing_api_max_sentences: int = Field(default=220, alias="PARAGRAPHING_API_MAX_SENTENCES")
     paragraphing_split_on_speaker: bool = Field(default=True, alias="PARAGRAPHING_SPLIT_ON_SPEAKER")
     max_upload_mb: int = Field(default=2048, alias="MAX_UPLOAD_MB")
+    podcast_subscription_csv: str = Field(default="./app/data/subscriptions.csv", alias="PODCAST_SUBSCRIPTION_CSV")
     run_tasks_inline: bool = Field(default=False, alias="RUN_TASKS_INLINE")
 
     model_config = SettingsConfigDict(

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 SUPPORTED_LANGUAGES = {"auto", "zh", "en", "ja", "ko", "es", "fr", "de"}
 SUPPORTED_TRANSLATION_LANGUAGES = {"zh", "en", "ja", "ko", "es", "fr", "de"}
+TRANSCRIPTION_MODES = {"hf", "youtube_transcript"}
 JOB_STATUSES = {
     "queued",
     "downloading",
@@ -46,6 +47,7 @@ class UrlJobRequest(BaseModel):
     enable_diarization: bool = True
     enable_translation: bool = False
     m1_optimized: bool = False
+    transcription_mode: Literal["hf", "youtube_transcript"] = "hf"
 
     @field_validator("language")
     @classmethod
@@ -74,6 +76,8 @@ class JobRead(BaseModel):
     enable_diarization: bool
     enable_translation: bool
     m1_optimized: bool
+    transcription_mode: Literal["hf", "youtube_transcript"] = "hf"
+    progress_percent: int | None = None
     error_message: str | None = None
     warning_message: str | None = None
     created_at: datetime
@@ -163,13 +167,14 @@ class PodcastRecommendationRequest(BaseModel):
     keywords: str | None = None
     max_results: int = Field(default=5, ge=1, le=10)
     days: int = Field(default=7, ge=1, le=30)
+    search_subscriptions: bool = False
 
     @model_validator(mode="after")
     def validate_seed_input(self) -> "PodcastRecommendationRequest":
         links = [link.strip() for link in self.links if link.strip()]
         keywords = (self.keywords or "").strip()
-        if not links and not keywords:
-            raise ValueError("At least one link or keyword is required")
+        if not links and not keywords and not self.search_subscriptions:
+            raise ValueError("At least one link, keyword, or subscription-list search is required")
         self.links = links
         self.keywords = keywords or None
         return self
@@ -210,6 +215,27 @@ class ParagraphSettingsUpdate(BaseModel):
     paragraphing_api_max_sentences: int | None = Field(default=None, ge=20, le=500)
     paragraphing_split_on_speaker: bool | None = None
     clear_paragraphing_api_key: bool = False
+
+
+class PodcastSubscriptionRead(BaseModel):
+    channel_id: str
+    url: str
+    title: str
+
+
+class PodcastSubscriptionCreate(BaseModel):
+    channel_id: str | None = None
+    url: str
+    title: str
+
+
+class PodcastCurationReportRequest(BaseModel):
+    items: list[PodcastRecommendationRead] = Field(default_factory=list, max_length=20)
+    target_audience: str | None = None
+
+
+class PodcastCurationReportRead(BaseModel):
+    markdown: str
 
 
 class ErrorResponse(BaseModel):

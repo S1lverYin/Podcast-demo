@@ -61,6 +61,7 @@ def _json(job: models.Job, segments: list[models.TranscriptSegment]) -> str:
             "source_url": job.source_url,
             "original_filename": job.original_filename,
             "language": job.language,
+            "transcription_mode": job.transcription_mode,
             "status": job.status,
             "created_at": job.created_at.isoformat() if job.created_at else None,
             "completed_at": job.completed_at.isoformat() if job.completed_at else None,
@@ -107,6 +108,7 @@ def _paragraph_json(job: models.Job, paragraphs: list[models.TranscriptParagraph
             "source_url": job.source_url,
             "original_filename": job.original_filename,
             "language": job.language,
+            "transcription_mode": job.transcription_mode,
             "status": job.status,
         },
         "paragraphs": [

@@ -260,7 +260,12 @@ export default function JobDetailPage() {
   }
 
   const job = jobQuery.data;
-  const progress = progressByStatus[job.status];
+  const transcriptionProgress = job.status === "transcribing" && typeof job.progress_percent === "number"
+    ? Math.round(job.progress_percent)
+    : null;
+  const progress = transcriptionProgress === null
+    ? progressByStatus[job.status]
+    : Math.min(70, Math.max(35, 35 + transcriptionProgress * 0.35));
   const canExport = segments.length > 0;
 
   return (
@@ -323,7 +328,12 @@ export default function JobDetailPage() {
             </h1>
             <p className="mt-1 font-mono text-xs text-slate-500">{job.id}</p>
           </div>
-          <JobStatusBadge status={job.status} />
+          <JobStatusBadge status={job.status} progressPercent={job.progress_percent} />
+        </div>
+
+        <div className="mb-2 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
+          <span>{job.status === "transcribing" ? "Transcribing progress" : "Workflow progress"}</span>
+          <span>{transcriptionProgress === null ? `${progress}%` : `${transcriptionProgress}%`}</span>
         </div>
 
         <div className="mb-4 h-2 overflow-hidden rounded-md bg-slate-100">
@@ -334,6 +344,12 @@ export default function JobDetailPage() {
         </div>
 
         <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-slate-500">Mode</dt>
+            <dd className="font-medium text-slate-900">
+              {job.transcription_mode === "youtube_transcript" ? "YouTube Transcript" : "HF/Whisper"}
+            </dd>
+          </div>
           <div>
             <dt className="text-slate-500">Language</dt>
             <dd className="font-medium text-slate-900">{job.language}</dd>

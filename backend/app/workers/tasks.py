@@ -15,22 +15,75 @@ from app.services.media import extract_audio
 from app.services.paragraphing import build_transcript_paragraphs
 from app.services.transcript_correction import correct_transcript_segments
 from app.services.translator import translate_transcript_segments
+from app.services.youtube_transcript import fetch_youtube_transcript, repair_youtube_transcript_segments
 from app.workers.celery_app import celery_app
 
 
 logger = logging.getLogger(__name__)
 
 
-def _set_status(db: Session, job: models.Job, status: str, message: str | None = None) -> None:
+def _set_status(
+    db: Session,
+    job: models.Job,
+    status: str,
+    message: str | None = None,
+    progress_percent: int | None = None,
+) -> None:
     job.status = status
+    if status == "transcribing":
+        job.progress_percent = 0 if progress_percent is None else progress_percent
+    elif progress_percent is not None:
+        job.progress_percent = progress_percent
     if message:
         job.warning_message = message
     db.commit()
     logger.info("Job %s status -> %s", job.id, status)
 
 
+def _set_transcribing_progress(db: Session, job: models.Job, percent: int) -> None:
+    clamped = min(100, max(0, int(percent)))
+    if job.progress_percent is not None and clamped < 100 and clamped <= job.progress_percent:
+        return
+    job.progress_percent = clamped
+    db.commit()
+
+
 def _append_warning(job: models.Job, message: str) -> None:
     job.warning_message = f"{job.warning_message}\n{message}" if job.warning_message else message
+
+
+def _persist_transcript(db: Session, job: models.Job, transcript_segments) -> None:
+    paragraph_drafts = build_transcript_paragraphs(transcript_segments)
+
+    db.execute(delete(models.TranscriptSegment).where(models.TranscriptSegment.job_id == job.id))
+    db.execute(delete(models.TranscriptParagraph).where(models.TranscriptParagraph.job_id == job.id))
+    for index, segment in enumerate(transcript_segments):
+        db.add(
+            models.TranscriptSegment(
+                job_id=job.id,
+                order_index=index,
+                start=segment.start,
+                end=segment.end,
+                speaker=segment.speaker,
+                text=segment.text,
+                translated_text=segment.translated_text,
+                language=segment.language,
+            )
+        )
+    for index, paragraph in enumerate(paragraph_drafts):
+        db.add(
+            models.TranscriptParagraph(
+                job_id=job.id,
+                order_index=index,
+                start=paragraph.start,
+                end=paragraph.end,
+                speaker=paragraph.speaker,
+                title=paragraph.title,
+                summary=paragraph.summary,
+                text=paragraph.text,
+                translated_text=paragraph.translated_text,
+            )
+        )
 
 
 def run_job(job_id: str) -> None:
@@ -45,7 +98,49 @@ def run_job(job_id: str) -> None:
 
         job.error_message = None
         job.completed_at = None
+        job.progress_percent = None
         db.commit()
+
+        if job.source_type == "url" and job.transcription_mode == "youtube_transcript":
+            _set_status(db, job, "transcribing", progress_percent=0)
+            requested_language = None if job.language == "auto" else job.language
+            transcript_segments = fetch_youtube_transcript(job.source_url or "", language=requested_language)
+            job.progress_percent = 35
+            db.commit()
+
+            _set_status(db, job, "correcting", progress_percent=35)
+            transcript_segments, repair_warning = repair_youtube_transcript_segments(
+                transcript_segments,
+                infer_speakers=job.enable_diarization,
+                progress_callback=lambda percent: _set_transcribing_progress(db, job, 35 + round(percent * 0.55)),
+            )
+            if repair_warning:
+                _append_warning(job, repair_warning)
+                db.commit()
+
+            if job.enable_translation:
+                try:
+                    _set_status(db, job, "translating")
+                    detected_language = transcript_segments[0].language if transcript_segments else job.language
+                    transcript_segments = translate_transcript_segments(
+                        transcript_segments,
+                        source_language=detected_language,
+                        target_language=settings.translation_target_language,
+                    )
+                except Exception as exc:
+                    _append_warning(job, f"Translation skipped: {exc}")
+                    db.commit()
+
+            _set_status(db, job, "segmenting")
+            _persist_transcript(db, job, transcript_segments)
+            detail = " with LLM speaker labeling" if job.enable_diarization else ""
+            _append_warning(job, f"Used fast YouTube transcript/subtitle extraction{detail}; no HF/Whisper audio transcription was run.")
+            job.status = "completed"
+            job.progress_percent = 100
+            job.completed_at = datetime.utcnow()
+            db.commit()
+            logger.info("Job %s completed from YouTube transcript with %s segments", job.id, len(transcript_segments))
+            return
 
         if job.source_type == "url" and not job.media_path:
             _set_status(db, job, "downloading")
@@ -61,7 +156,7 @@ def run_job(job_id: str) -> None:
         job.audio_path = extract_audio(job.media_path, str(audio_path))
         db.commit()
 
-        _set_status(db, job, "transcribing")
+        _set_status(db, job, "transcribing", progress_percent=0)
         requested_language = None if job.language == "auto" else job.language
         effective_model_size = "small" if job.m1_optimized else settings.whisper_model_size
         effective_compute_type = "int8" if job.m1_optimized else None
@@ -70,6 +165,7 @@ def run_job(job_id: str) -> None:
             language=requested_language,
             model_size=effective_model_size,
             compute_type=effective_compute_type,
+            progress_callback=lambda percent: _set_transcribing_progress(db, job, percent),
         )
 
         _set_status(db, job, "correcting")
@@ -111,39 +207,10 @@ def run_job(job_id: str) -> None:
                 db.commit()
 
         _set_status(db, job, "segmenting")
-        paragraph_drafts = build_transcript_paragraphs(transcript_segments)
-
-        db.execute(delete(models.TranscriptSegment).where(models.TranscriptSegment.job_id == job.id))
-        db.execute(delete(models.TranscriptParagraph).where(models.TranscriptParagraph.job_id == job.id))
-        for index, segment in enumerate(transcript_segments):
-            db.add(
-                models.TranscriptSegment(
-                    job_id=job.id,
-                    order_index=index,
-                    start=segment.start,
-                    end=segment.end,
-                    speaker=segment.speaker,
-                    text=segment.text,
-                    translated_text=segment.translated_text,
-                    language=segment.language,
-                )
-            )
-        for index, paragraph in enumerate(paragraph_drafts):
-            db.add(
-                models.TranscriptParagraph(
-                    job_id=job.id,
-                    order_index=index,
-                    start=paragraph.start,
-                    end=paragraph.end,
-                    speaker=paragraph.speaker,
-                    title=paragraph.title,
-                    summary=paragraph.summary,
-                    text=paragraph.text,
-                    translated_text=paragraph.translated_text,
-                )
-            )
+        _persist_transcript(db, job, transcript_segments)
 
         job.status = "completed"
+        job.progress_percent = 100
         job.completed_at = datetime.utcnow()
         db.commit()
         logger.info("Job %s completed with %s segments", job.id, len(transcript_segments))

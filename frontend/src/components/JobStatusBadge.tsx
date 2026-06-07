@@ -28,7 +28,15 @@ const statusClasses: Record<JobStatus, string> = {
   failed: "border-rose-200 bg-rose-50 text-rose-700",
 };
 
-export default function JobStatusBadge({ status }: { status: JobStatus }) {
+export default function JobStatusBadge({
+  status,
+  progressPercent,
+}: {
+  status: JobStatus;
+  progressPercent?: number | null;
+}) {
+  const showProgress = status === "transcribing" && typeof progressPercent === "number";
+
   return (
     <span
       className={[
@@ -37,6 +45,7 @@ export default function JobStatusBadge({ status }: { status: JobStatus }) {
       ].join(" ")}
     >
       {statusLabels[status]}
+      {showProgress ? ` ${Math.round(progressPercent)}%` : ""}
     </span>
   );
 }

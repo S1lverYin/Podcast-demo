@@ -23,6 +23,8 @@ export type Job = {
   enable_diarization: boolean;
   enable_translation: boolean;
   m1_optimized: boolean;
+  transcription_mode: "hf" | "youtube_transcript";
+  progress_percent: number | null;
   error_message: string | null;
   warning_message: string | null;
   created_at: string;
@@ -98,6 +100,7 @@ export type CreateUrlJobPayload = {
   enable_diarization: boolean;
   enable_translation: boolean;
   m1_optimized: boolean;
+  transcription_mode?: "hf" | "youtube_transcript";
 };
 
 export type JobQueuedResponse = {

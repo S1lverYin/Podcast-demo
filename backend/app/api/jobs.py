@@ -151,6 +151,7 @@ def create_from_url(
         enable_diarization=payload.enable_diarization,
         enable_translation=payload.enable_translation,
         m1_optimized=payload.m1_optimized,
+        transcription_mode=payload.transcription_mode,
         status="queued",
     )
     db.add(job)

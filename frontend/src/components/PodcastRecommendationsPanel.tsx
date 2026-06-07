@@ -1,9 +1,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Search } from "lucide-react";
+import { Copy, ExternalLink, FileText, Loader2, Search, X } from "lucide-react";
 
 import { getApiError } from "../api/client";
-import { recommendPodcasts } from "../api/podcast";
+import { generateCurationReport, recommendPodcasts } from "../api/podcast";
 import type { PodcastRecommendation } from "../types/job";
 
 function parseLinks(value: string): string[] {
@@ -36,10 +36,13 @@ export default function PodcastRecommendationsPanel() {
   const [keywords, setKeywords] = useState("");
   const [days, setDays] = useState(7);
   const [maxResults, setMaxResults] = useState(5);
+  const [searchSubscriptions, setSearchSubscriptions] = useState(false);
   const [recommendations, setRecommendations] = useState<PodcastRecommendation[]>([]);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMarkdown, setReportMarkdown] = useState("");
   const links = useMemo(() => parseLinks(linksText), [linksText]);
   const cleanedKeywords = keywords.trim();
-  const canSearch = links.length > 0 || cleanedKeywords.length > 0;
+  const canSearch = links.length > 0 || cleanedKeywords.length > 0 || searchSubscriptions;
 
   const recommendationMutation = useMutation({
     mutationFn: () =>
@@ -48,14 +51,28 @@ export default function PodcastRecommendationsPanel() {
         keywords: cleanedKeywords || null,
         max_results: maxResults,
         days,
+        search_subscriptions: searchSubscriptions,
       }),
     onSuccess: (items) => setRecommendations(items),
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: () => generateCurationReport(recommendations, "深潮读者"),
+    onSuccess: (markdown) => {
+      setReportMarkdown(markdown);
+      setReportOpen(true);
+    },
   });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSearch || recommendationMutation.isPending) return;
     recommendationMutation.mutate();
+  }
+
+  async function copyReport() {
+    if (!reportMarkdown) return;
+    await navigator.clipboard.writeText(reportMarkdown);
   }
 
   return (
@@ -108,6 +125,20 @@ export default function PodcastRecommendationsPanel() {
               可只填关键词，也可同时加入链接提高相似度。
             </p>
           </div>
+          <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700">
+            <input
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              type="checkbox"
+              checked={searchSubscriptions}
+              onChange={(event) => setSearchSubscriptions(event.target.checked)}
+            />
+            <span>
+              <span className="block font-semibold text-slate-900">订阅列表搜索</span>
+              <span className="mt-1 block text-xs leading-5 text-slate-600">
+                打开后从已导入的订阅频道列表里补充近期推荐。
+              </span>
+            </span>
+          </label>
         </div>
         <label className="block text-sm font-medium text-slate-700">
           参考链接
@@ -145,30 +176,89 @@ export default function PodcastRecommendationsPanel() {
       ) : null}
 
       {recommendations.length > 0 ? (
-        <div className="mt-5 grid gap-3 lg:grid-cols-5">
-          {recommendations.map((item) => {
-            const duration = formatDuration(item.duration);
-            return (
-              <article key={item.url} className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <h3 className="line-clamp-3 text-sm font-semibold leading-5 text-slate-950">{item.title}</h3>
-                  <a
-                    className="shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-emerald-700"
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="打开链接"
-                  >
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
-                </div>
-                <p className="text-xs font-medium text-slate-600">
-                  {[item.source, item.published_date, duration].filter(Boolean).join(" · ")}
-                </p>
-                <p className="mt-2 text-xs leading-5 text-slate-700">{item.reason}</p>
-              </article>
-            );
-          })}
+        <>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-700">已找到 {recommendations.length} 条推荐</p>
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:border-emerald-500 hover:text-emerald-700 disabled:opacity-50"
+              type="button"
+              disabled={reportMutation.isPending}
+              onClick={() => reportMutation.mutate()}
+            >
+              {reportMutation.isPending ? (
+                <Loader2 className="animate-spin" size={15} aria-hidden="true" />
+              ) : (
+                <FileText size={15} aria-hidden="true" />
+              )}
+              {reportMutation.isPending ? "生成中" : "打开策展日报窗口"}
+            </button>
+          </div>
+          {reportMutation.isError ? (
+            <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              {getApiError(reportMutation.error)}
+            </div>
+          ) : null}
+          <div className="mt-3 grid gap-3 lg:grid-cols-5">
+            {recommendations.map((item) => {
+              const duration = formatDuration(item.duration);
+              return (
+                <article key={item.url} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <h3 className="line-clamp-3 text-sm font-semibold leading-5 text-slate-950">{item.title}</h3>
+                    <a
+                      className="shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-emerald-700"
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="打开链接"
+                    >
+                      <ExternalLink size={15} aria-hidden="true" />
+                    </a>
+                  </div>
+                  <p className="text-xs font-medium text-slate-600">
+                    {[item.source, item.published_date, duration].filter(Boolean).join(" · ")}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-700">{item.reason}</p>
+                </article>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+
+      {reportOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <section className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-md bg-white shadow-xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950">策展日报</h2>
+                <p className="mt-1 text-xs text-slate-500">crypto-content-curation-daily 风格输出</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:border-emerald-500 hover:text-emerald-700"
+                  type="button"
+                  onClick={copyReport}
+                >
+                  <Copy size={15} aria-hidden="true" />
+                  复制
+                </button>
+                <button
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+                  type="button"
+                  onClick={() => setReportOpen(false)}
+                  title="关闭"
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <textarea
+              className="min-h-[60vh] flex-1 resize-none overflow-auto border-0 bg-slate-50 p-5 font-mono text-sm leading-6 text-slate-900 outline-none"
+              value={reportMarkdown}
+              onChange={(event) => setReportMarkdown(event.target.value)}
+            />
+          </section>
         </div>
       ) : null}
     </section>

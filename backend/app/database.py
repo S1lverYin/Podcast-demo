@@ -54,3 +54,9 @@ def _migrate_sqlite() -> None:
     with engine.begin() as connection:
         if "m1_optimized" not in job_columns:
             connection.execute(text("ALTER TABLE jobs ADD COLUMN m1_optimized BOOLEAN NOT NULL DEFAULT 0"))
+        if "transcription_mode" not in job_columns:
+            connection.execute(text("ALTER TABLE jobs ADD COLUMN transcription_mode VARCHAR DEFAULT 'hf' NOT NULL"))
+        if "progress_percent" not in job_columns:
+            connection.execute(text("ALTER TABLE jobs ADD COLUMN progress_percent INTEGER"))
+        if "eta_seconds" not in job_columns:
+            connection.execute(text("ALTER TABLE jobs ADD COLUMN eta_seconds INTEGER"))

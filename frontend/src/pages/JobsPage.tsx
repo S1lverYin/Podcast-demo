@@ -78,7 +78,7 @@ export default function JobsPage() {
                   <span className="line-clamp-2">{job.original_filename ?? job.source_url ?? job.source_type}</span>
                 </td>
                 <td className="px-5 py-4">
-                  <JobStatusBadge status={job.status} />
+                  <JobStatusBadge status={job.status} progressPercent={job.progress_percent} />
                 </td>
                 <td className="px-5 py-4 text-slate-600">{formatDate(job.created_at)}</td>
                 <td className="px-5 py-4 text-slate-600">{formatDate(job.completed_at)}</td>

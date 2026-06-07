@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from collections.abc import Callable
 
 from app.config import get_settings
 from app.schemas import TranscriptSegment
@@ -14,6 +15,7 @@ def transcribe_audio(
     language: str | None = None,
     model_size: str = "large-v3",
     compute_type: str | None = None,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> list[TranscriptSegment]:
     """Transcribe an audio file with faster-whisper and return timestamped segments.
 
@@ -23,6 +25,7 @@ def transcribe_audio(
         model_size: faster-whisper model size (tiny, base, small, medium, large-v3).
         compute_type: Optional override for faster-whisper compute_type (e.g. "int8").
                       When None, falls back to the global WHISPER_COMPUTE_TYPE setting.
+        progress_callback: Called with 0-100 percent during transcription.
     """
     os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     try:
@@ -51,16 +54,30 @@ def transcribe_audio(
     if language and language != "auto":
         transcribe_kwargs["language"] = language
 
+    if progress_callback:
+        progress_callback(0)
+
     segments_iter, info = model.transcribe(audio_path, **transcribe_kwargs)
     detected_language = getattr(info, "language", None)
-    segments = [
-        TranscriptSegment(
-            start=float(segment.start),
-            end=float(segment.end),
-            text=segment.text.strip(),
-            language=detected_language,
+    duration = float(getattr(info, "duration", 0.0) or 0.0)
+    last_progress = -1
+    segments: list[TranscriptSegment] = []
+    for segment in segments_iter:
+        segments.append(
+            TranscriptSegment(
+                start=float(segment.start),
+                end=float(segment.end),
+                text=segment.text.strip(),
+                language=detected_language,
+            )
         )
-        for segment in segments_iter
-    ]
+        if progress_callback and duration > 0:
+            progress = min(99, max(0, int((float(segment.end) / duration) * 100)))
+            if progress >= last_progress + 2:
+                progress_callback(progress)
+                last_progress = progress
+
+    if progress_callback:
+        progress_callback(100)
     logger.info("Transcribed %s segments in %.2fs", len(segments), time.perf_counter() - inference_started)
     return segments

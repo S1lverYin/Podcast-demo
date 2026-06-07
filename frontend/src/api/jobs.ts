@@ -17,6 +17,7 @@ export type JobOptions = {
   enableDiarization: boolean;
   enableTranslation: boolean;
   m1Optimized: boolean;
+  transcriptionMode?: "hf" | "youtube_transcript";
 };
 
 export type RegenerateParagraphOptions = {
