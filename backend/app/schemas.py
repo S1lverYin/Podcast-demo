@@ -233,6 +233,24 @@ class DiarizationSettingsUpdate(BaseModel):
     diarization_api_model: str | None = None
     clear_diarization_api_key: bool = False
 
+
+class TranslationSettingsRead(BaseModel):
+    translation_api_provider: Literal["openai", "anthropic"]
+    translation_api_base_url: str
+    translation_api_model: str | None = None
+    translation_api_key_configured: bool
+    translation_contextual: bool
+
+
+class TranslationSettingsUpdate(BaseModel):
+    translation_api_provider: Literal["openai", "anthropic"] | None = None
+    translation_api_base_url: str | None = None
+    translation_api_key: str | None = None
+    translation_api_model: str | None = None
+    translation_contextual: bool | None = None
+    clear_translation_api_key: bool = False
+
+
 class PodcastSubscriptionRead(BaseModel):
     channel_id: str
     url: str

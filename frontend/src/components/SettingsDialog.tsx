@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, Save, X } from "lucide-react";
 
 import { getApiError } from "../api/client";
-import { getDiarizationSettings, getParagraphSettings, updateDiarizationSettings, updateParagraphSettings } from "../api/settings";
+import { getDiarizationSettings, getParagraphSettings, getTranslationSettings, updateDiarizationSettings, updateParagraphSettings, updateTranslationSettings } from "../api/settings";
 import SubscriptionSourcesPanel from "../components/SubscriptionSourcesPanel";
 import type { ParagraphingMode } from "../types/job";
 
@@ -111,8 +111,20 @@ export default function SettingsDialog({ open, onClose }: Props) {
   const [diarizationBaseUrl, setDiarizationBaseUrl] = useState("https://api.openai.com/v1");
   const [diarizationModel, setDiarizationModel] = useState("");
   const [diarizationApiKey, setDiarizationApiKey] = useState("");
+  const [translationProvider, setTranslationProvider] = useState<ApiProvider>("openai");
+  const [translationBaseUrl, setTranslationBaseUrl] = useState("https://api.openai.com/v1");
+  const [translationModel, setTranslationModel] = useState("");
+  const [translationApiKey, setTranslationApiKey] = useState("");
+  const [translationClearKey, setTranslationClearKey] = useState(false);
+  const [translationContextual, setTranslationContextual] = useState(true);
   const [diarizationClearKey, setDiarizationClearKey] = useState(false);
   const [modelPreset, setModelPreset] = useState("custom");
+
+  const translationQuery = useQuery({
+    queryKey: ["translation-settings"],
+    queryFn: getTranslationSettings,
+    enabled: open,
+  });
 
   const diarizationQuery = useQuery({
     queryKey: ["diarization-settings"],
@@ -125,6 +137,16 @@ export default function SettingsDialog({ open, onClose }: Props) {
     queryFn: getParagraphSettings,
     enabled: open,
   });
+
+  useEffect(() => {
+    if (!translationQuery.data) return;
+    setTranslationProvider(translationQuery.data.translation_api_provider);
+    setTranslationBaseUrl(translationQuery.data.translation_api_base_url);
+    setTranslationModel(translationQuery.data.translation_api_model ?? "");
+    setTranslationApiKey("");
+    setTranslationClearKey(false);
+    setTranslationContextual(translationQuery.data.translation_contextual);
+  }, [translationQuery.data]);
 
   useEffect(() => {
     if (!diarizationQuery.data) return;
@@ -158,6 +180,23 @@ export default function SettingsDialog({ open, onClose }: Props) {
       )?.value ?? "custom",
     );
   }, [settingsQuery.data]);
+
+  const translationMutation = useMutation({
+    mutationFn: () =>
+      updateTranslationSettings({
+        translation_api_provider: translationProvider,
+        translation_api_base_url: translationBaseUrl,
+        translation_api_model: translationModel,
+        translation_api_key: translationApiKey,
+        translation_contextual: translationContextual,
+        clear_translation_api_key: translationClearKey,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["translation-settings"] });
+      setTranslationApiKey("");
+      setTranslationClearKey(false);
+    },
+  });
 
   const diarizationMutation = useMutation({
     mutationFn: () =>
@@ -203,6 +242,9 @@ export default function SettingsDialog({ open, onClose }: Props) {
     updateMutation.mutate();
     if (diarizationApiKey || diarizationClearKey || diarizationProvider) {
       diarizationMutation.mutate();
+    }
+    if (translationApiKey || translationClearKey || translationProvider) {
+      translationMutation.mutate();
     }
   }
 
@@ -408,6 +450,18 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
             <div className="border-t border-slate-100 px-5 py-4">
               <SubscriptionSourcesPanel />
+            {/* Translation API */}
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-2">翻译 API</h3>
+              <p className="text-xs text-slate-500 mb-3">LLM 上下文智能翻译，贴合语境。</p>
+              <label className="block text-sm font-medium text-slate-700 mt-3">
+                <input className="h-4 w-4 accent-emerald-600" type="checkbox"
+                  checked={translationContextual}
+                  onChange={(event) => setTranslationContextual(event.target.checked)} />
+                上下文智能翻译（推荐）
+              </label>
+            </div>
+
             {/* Speaker Diarization API */}
             <div className="mt-4 border-t border-slate-100 pt-4">
               <h3 className="text-sm font-semibold text-slate-800 mb-2">说话人分离 API（可选）</h3>

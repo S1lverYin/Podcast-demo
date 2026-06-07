@@ -41,3 +41,20 @@ export type DiarizationSettingsUpdate = {
   diarization_api_model?: string;
   clear_diarization_api_key?: boolean;
 };
+
+export type TranslationSettings = {
+  translation_api_provider: "openai" | "anthropic";
+  translation_api_base_url: string;
+  translation_api_model: string | null;
+  translation_api_key_configured: boolean;
+  translation_contextual: boolean;
+};
+
+export type TranslationSettingsUpdate = {
+  translation_api_provider?: "openai" | "anthropic";
+  translation_api_base_url?: string;
+  translation_api_key?: string;
+  translation_api_model?: string;
+  translation_contextual?: boolean;
+  clear_translation_api_key?: boolean;
+};

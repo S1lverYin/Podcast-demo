@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter
 
 from app.config import get_settings
-from app.schemas import DiarizationSettingsRead, DiarizationSettingsUpdate, ParagraphSettingsRead, ParagraphSettingsUpdate
+from app.schemas import DiarizationSettingsRead, DiarizationSettingsUpdate, ParagraphSettingsRead, ParagraphSettingsUpdate, TranslationSettingsRead, TranslationSettingsUpdate
 
 
 router = APIRouter()
@@ -39,6 +39,46 @@ def _write_env_values(values: dict[str, str]) -> None:
     ENV_PATH.chmod(0o600)
     get_settings.cache_clear()
 
+
+
+
+def _translation_settings_read() -> TranslationSettingsRead:
+    settings = get_settings()
+    provider = settings.translation_api_provider.lower().strip()
+    if provider not in {"openai", "anthropic"}:
+        provider = "openai"
+    return TranslationSettingsRead(
+        translation_api_provider=provider,
+        translation_api_base_url=settings.translation_api_base_url,
+        translation_api_model=settings.translation_api_model,
+        translation_api_key_configured=bool(settings.translation_api_key),
+        translation_contextual=settings.translation_contextual,
+    )
+
+
+@router.get("/translation", response_model=TranslationSettingsRead)
+def get_translation_settings() -> TranslationSettingsRead:
+    return _translation_settings_read()
+
+
+@router.put("/translation", response_model=TranslationSettingsRead)
+def update_translation_settings(payload: TranslationSettingsUpdate) -> TranslationSettingsRead:
+    values: dict[str, str] = {}
+    if payload.translation_api_provider is not None:
+        values["TRANSLATION_API_PROVIDER"] = payload.translation_api_provider
+    if payload.translation_api_base_url is not None:
+        values["TRANSLATION_API_BASE_URL"] = payload.translation_api_base_url.strip()
+    if payload.translation_api_model is not None:
+        values["TRANSLATION_API_MODEL"] = payload.translation_api_model.strip()
+    if payload.translation_contextual is not None:
+        values["TRANSLATION_CONTEXTUAL"] = "true" if payload.translation_contextual else "false"
+    if payload.clear_translation_api_key:
+        values["TRANSLATION_API_KEY"] = ""
+    elif payload.translation_api_key and payload.translation_api_key.strip():
+        values["TRANSLATION_API_KEY"] = payload.translation_api_key.strip()
+    if values:
+        _write_env_values(values)
+    return _translation_settings_read()
 
 
 def _diarization_settings_read() -> DiarizationSettingsRead:

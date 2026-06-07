@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     translation_api_base_url: str = Field(default="https://api.openai.com/v1", alias="TRANSLATION_API_BASE_URL")
     translation_api_key: str | None = Field(default=None, alias="TRANSLATION_API_KEY")
     translation_api_model: str | None = Field(default=None, alias="TRANSLATION_API_MODEL")
+
+    translation_api_provider: str = Field(default="openai", alias="TRANSLATION_API_PROVIDER")
+    translation_contextual: bool = Field(default=True, alias="TRANSLATION_CONTEXTUAL")
+
     translation_batch_size: int = Field(default=16, alias="TRANSLATION_BATCH_SIZE")
     paragraphing_mode: str = Field(default="rules", alias="PARAGRAPHING_MODE")
     paragraphing_api_provider: str = Field(default="openai", alias="PARAGRAPHING_API_PROVIDER")

@@ -22,3 +22,16 @@ export async function updateDiarizationSettings(
   const response = await apiClient.put("/settings/diarization", payload);
   return response.data;
 }
+
+
+export async function getTranslationSettings(): Promise<import("../types/settings").TranslationSettings> {
+  const response = await apiClient.get("/settings/translation");
+  return response.data;
+}
+
+export async function updateTranslationSettings(
+  payload: import("../types/settings").TranslationSettingsUpdate,
+): Promise<import("../types/settings").TranslationSettings> {
+  const response = await apiClient.put("/settings/translation", payload);
+  return response.data;
+}
