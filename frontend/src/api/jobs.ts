@@ -72,6 +72,20 @@ export async function clearPodcastNotes(jobId: string): Promise<void> {
   await apiClient.delete(`/jobs/${jobId}/podcast-notes`);
 }
 
+export type SpeakerAutofillResult = {
+  host: string;
+  guests: string;
+  podcast_source: string;
+  original_title: string;
+  published_date: string;
+  source_url: string;
+};
+
+export async function autofillSpeakers(jobId: string): Promise<SpeakerAutofillResult> {
+  const response = await apiClient.post<SpeakerAutofillResult>(`/jobs/${jobId}/speaker-autofill`);
+  return response.data;
+}
+
 export async function generatePodcastNote(
   jobId: string,
   payload: PodcastNoteGeneratePayload,
@@ -132,6 +146,13 @@ export async function translateParagraph(
 
 export async function retryJob(jobId: string): Promise<JobQueuedResponse> {
   const response = await apiClient.post<JobQueuedResponse>(`/jobs/${jobId}/retry`);
+  return response.data;
+}
+
+export async function diarizeJob(jobId: string): Promise<TranscriptSegment[]> {
+  const response = await apiClient.post<TranscriptSegment[]>(`/jobs/${jobId}/diarize`, null, {
+    timeout: 600_000, // 10 min — pyannote model download + inference
+  });
   return response.data;
 }
 

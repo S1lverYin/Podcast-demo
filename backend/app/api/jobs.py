@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -22,8 +23,13 @@ from app.schemas import (
     UrlJobRequest,
 )
 from app.services.downloader import validate_public_http_url
+from app.schemas import DiarizationSegment, TranscriptSegment
+from app.services.alignment import assign_speakers_to_transcript
+from app.services.diarization import diarize_audio
+from app.services.downloader import download_audio_from_url
+from app.services.media import extract_audio
 from app.services.paragraphing import build_transcript_paragraphs
-from app.services.podcast_notes import generate_podcast_note
+from app.services.podcast_notes import generate_podcast_note, autofill_speakers
 from app.services.translator import translate_text
 from app.workers.tasks import process_transcription_job, run_job
 
@@ -429,6 +435,122 @@ def generate_job_podcast_note(
     db.commit()
     db.refresh(note)
     return note
+
+
+class SpeakerAutofillResponse(BaseModel):
+    host: str
+    guests: str
+    podcast_source: str = ""
+    original_title: str = ""
+    published_date: str = ""
+    source_url: str = ""
+
+
+@router.post("/{job_id}/speaker-autofill", response_model=SpeakerAutofillResponse)
+def speaker_autofill(
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> SpeakerAutofillResponse:
+    """Auto-fill host and guest speaker names from source URL metadata and transcript."""
+    job = _get_job_or_404(db, job_id)
+    segments = list(
+        db.scalars(
+            select(models.TranscriptSegment)
+            .where(models.TranscriptSegment.job_id == job_id)
+            .order_by(models.TranscriptSegment.order_index, models.TranscriptSegment.start)
+        ).all()
+    )
+    return autofill_speakers(job, segments)
+
+
+@router.post("/{job_id}/diarize", response_model=list[SegmentRead])
+def diarize_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> list[models.TranscriptSegment]:
+    """Run pyannote speaker diarization on a completed job and assign speakers to segments."""
+    settings = get_settings()
+    job = _get_job_or_404(db, job_id)
+
+    if job.status not in {"completed", "failed"}:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Job must be completed before diarization")
+
+    if not settings.hf_token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="HF_TOKEN is required for speaker diarization")
+
+    # Get existing segments
+    db_segments = list(
+        db.scalars(
+            select(models.TranscriptSegment)
+            .where(models.TranscriptSegment.job_id == job_id)
+            .order_by(models.TranscriptSegment.order_index, models.TranscriptSegment.start)
+        ).all()
+    )
+    if not db_segments:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No transcript segments to diarize")
+
+    # Ensure we have an audio file
+    if not job.audio_path:
+        if not job.media_path and job.source_url:
+            output_dir = settings.storage_path / "downloads" / job.id
+            job.media_path = download_audio_from_url(str(job.source_url), str(output_dir))
+            db.commit()
+        if job.media_path:
+            audio_path = settings.storage_path / "audio" / f"{job.id}.wav"
+            job.audio_path = extract_audio(str(job.media_path), str(audio_path))
+            db.commit()
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No audio source available for diarization")
+
+    # Convert DB segments to in-memory TranscriptSegment objects
+    in_memory = [
+        TranscriptSegment(
+            start=s.start,
+            end=s.end,
+            text=s.text,
+            speaker=s.speaker,
+        )
+        for s in db_segments
+    ]
+
+    # Run pyannote diarization
+    try:
+        diarization_segments = diarize_audio(str(job.audio_path))
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Diarization failed: {exc}") from exc
+
+    if not diarization_segments:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Diarization returned no speaker segments")
+
+    # Align speakers with transcript segments
+    in_memory_schemas = [
+        TranscriptSegment(
+            start=s.start,
+            end=s.end,
+            text=s.text,
+            speaker=s.speaker,
+        )
+        for s in db_segments
+    ]
+    pyannote_schemas = [
+        DiarizationSegment(start=d.start, end=d.end, speaker=d.speaker)
+        for d in diarization_segments
+    ]
+    assigned = assign_speakers_to_transcript(in_memory_schemas, pyannote_schemas)
+
+    # Update DB segments with speaker labels
+    for db_seg, assigned_seg in zip(db_segments, assigned):
+        db_seg.speaker = assigned_seg.speaker
+    db.commit()
+
+    # Return updated segments
+    return list(
+        db.scalars(
+            select(models.TranscriptSegment)
+            .where(models.TranscriptSegment.job_id == job_id)
+            .order_by(models.TranscriptSegment.order_index, models.TranscriptSegment.start)
+        ).all()
+    )
 
 
 @router.post("/{job_id}/paragraphs/{paragraph_id}/translate", response_model=ParagraphRead)

@@ -4,6 +4,7 @@ import { KeyRound, Loader2, Save, X } from "lucide-react";
 
 import { getApiError } from "../api/client";
 import { getParagraphSettings, updateParagraphSettings } from "../api/settings";
+import SubscriptionSourcesPanel from "../components/SubscriptionSourcesPanel";
 import type { ParagraphingMode } from "../types/job";
 
 type ApiProvider = "openai" | "anthropic";
@@ -183,7 +184,7 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-md border border-slate-200 bg-white shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-md border border-slate-200 bg-white shadow-xl">
         <div className="shrink-0 flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div className="flex items-center gap-2">
             <KeyRound size={18} aria-hidden="true" />
@@ -364,6 +365,10 @@ export default function SettingsDialog({ open, onClose }: Props) {
                 {getApiError(settingsQuery.error ?? updateMutation.error)}
               </div>
             ) : null}
+            </div>
+
+            <div className="border-t border-slate-100 px-5 py-4">
+              <SubscriptionSourcesPanel />
             </div>
 
             <div className="shrink-0 flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, FileText, Loader2, Search, Sparkles, Trash2, Users } from "lucide-react";
+import { Copy, Download, FileText, Loader2, Search, Sparkles, Trash2 } from "lucide-react";
 
-import { clearPodcastNotes, generatePodcastNote, getPodcastNotes } from "../api/jobs";
+import { autofillSpeakers, clearPodcastNotes, generatePodcastNote, getPodcastNotes } from "../api/jobs";
 import { getApiError } from "../api/client";
 import type { Job, PodcastNote, PodcastNoteGeneratePayload } from "../types/job";
 import { parseServerDate } from "../utils/date";
@@ -45,11 +45,11 @@ export default function PodcastNotesPanel({ job }: PodcastNotesPanelProps) {
   const [guests, setGuests] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [chapterOutline, setChapterOutline] = useState("");
-  const [autoMapSpeakers, setAutoMapSpeakers] = useState(true);
-  const [lookupSourceMetadata, setLookupSourceMetadata] = useState(false);
   const [clearExistingNotes, setClearExistingNotes] = useState(true);
   const [markdown, setMarkdown] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const [autofillLoading, setAutofillLoading] = useState(false);
+  const [autofillDone, setAutofillDone] = useState(false);
 
   const jobId = job?.id;
   const fallbackTitle = job?.original_filename ?? job?.source_url ?? "";
@@ -62,8 +62,6 @@ export default function PodcastNotesPanel({ job }: PodcastNotesPanelProps) {
     setGuests("");
     setSourceUrl(job?.source_url ?? "");
     setChapterOutline("");
-    setAutoMapSpeakers(true);
-    setLookupSourceMetadata(false);
     setClearExistingNotes(true);
     setMarkdown("");
     setCopyState("idle");
@@ -105,6 +103,26 @@ export default function PodcastNotesPanel({ job }: PodcastNotesPanelProps) {
     [latestNote?.title, originalTitle],
   );
 
+  async function handleAutofillAll() {
+    if (!jobId || autofillLoading) return;
+    setAutofillLoading(true);
+    try {
+      const result = await autofillSpeakers(jobId);
+      if (result.host) setHost(result.host);
+      if (result.guests) setGuests(result.guests);
+      if (result.podcast_source) setPodcastSource(result.podcast_source);
+      if (result.original_title) setOriginalTitle(result.original_title);
+      if (result.published_date) setPublishedDate(result.published_date);
+      if (result.source_url) setSourceUrl(result.source_url);
+      setAutofillDone(true);
+      window.setTimeout(() => setAutofillDone(false), 1800);
+    } catch (error) {
+      console.error("autofill failed", error);
+    } finally {
+      setAutofillLoading(false);
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canGenerate) return;
@@ -117,8 +135,8 @@ export default function PodcastNotesPanel({ job }: PodcastNotesPanelProps) {
       guests: emptyToNull(guests),
       source_url: emptyToNull(sourceUrl),
       chapter_outline: emptyToNull(chapterOutline),
-      auto_map_speakers: autoMapSpeakers,
-      lookup_source_metadata: lookupSourceMetadata,
+      auto_map_speakers: true,
+      lookup_source_metadata: true,
       clear_existing_notes: clearExistingNotes,
       include_full_dialogue: true,
     });
@@ -141,7 +159,13 @@ export default function PodcastNotesPanel({ job }: PodcastNotesPanelProps) {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(320px,420px)_1fr]">
-      <form className="space-y-4 rounded-md border border-slate-200 bg-white p-5 shadow-sm" onSubmit={handleSubmit}>
+      <form
+        className={[
+          "space-y-4 rounded-md border border-slate-200 bg-white p-5 shadow-sm transition-opacity",
+          autofillLoading ? "opacity-70" : "",
+        ].join(" ")}
+        onSubmit={handleSubmit}
+      >
         <div className="flex items-center gap-2">
           <FileText size={18} aria-hidden="true" />
           <h2 className="text-base font-semibold text-slate-950">播客笔记</h2>
@@ -214,27 +238,28 @@ export default function PodcastNotesPanel({ job }: PodcastNotesPanelProps) {
           />
         </label>
 
+        <button
+          className={[
+            "inline-flex h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-all disabled:opacity-40",
+            autofillDone
+              ? "bg-emerald-700 text-white"
+              : "bg-slate-800 text-white hover:bg-slate-900",
+          ].join(" ")}
+          type="button"
+          disabled={autofillLoading || !jobId}
+          onClick={() => void handleAutofillAll()}
+        >
+          {autofillLoading ? (
+            <Loader2 className="animate-spin" size={18} aria-hidden="true" />
+          ) : autofillDone ? (
+            <span className="text-base">✓</span>
+          ) : (
+            <Search size={18} aria-hidden="true" />
+          )}
+          {autofillLoading ? "联网补全中…" : autofillDone ? "已补全 ✓" : "联网补全信息"}
+        </button>
+
         <div className="space-y-2">
-          <label className="flex min-h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700">
-            <input
-              className="h-4 w-4 accent-emerald-600"
-              type="checkbox"
-              checked={autoMapSpeakers}
-              onChange={(event) => setAutoMapSpeakers(event.target.checked)}
-            />
-            <Users size={15} aria-hidden="true" />
-            自动映射 speaker 名字
-          </label>
-          <label className="flex min-h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700">
-            <input
-              className="h-4 w-4 accent-emerald-600"
-              type="checkbox"
-              checked={lookupSourceMetadata}
-              onChange={(event) => setLookupSourceMetadata(event.target.checked)}
-            />
-            <Search size={15} aria-hidden="true" />
-            联网补全源信息/日期
-          </label>
           <label className="flex min-h-10 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium text-slate-700">
             <input
               className="h-4 w-4 accent-emerald-600"

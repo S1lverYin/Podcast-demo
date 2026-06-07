@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from collections.abc import Callable
 from functools import lru_cache
 from typing import TypeVar
 
@@ -133,6 +134,7 @@ def translate_texts(
     texts: list[str],
     source_language: str | None,
     target_language: str | None = None,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> list[str]:
     """Translate plain text items using the configured translation backend."""
     settings = get_settings()
@@ -142,14 +144,18 @@ def translate_texts(
 
     target = target_language or settings.translation_target_language
     batch_size = max(1, settings.translation_batch_size)
+    batches = _chunks(texts, batch_size)
+    total_batches = len(batches)
     translated: list[str] = []
-    for batch in _chunks(texts, batch_size):
+    for batch_index, batch in enumerate(batches):
         if mode == "api":
             translated.extend(_api_translate(batch, source_language, target))
         elif mode == "local":
             translated.extend(_local_translate(batch, target))
         else:
             raise RuntimeError("TRANSLATION_MODE must be one of: off, local, api")
+        if progress_callback:
+            progress_callback(round((batch_index + 1) / total_batches * 100))
     return translated
 
 
@@ -169,9 +175,15 @@ def translate_transcript_segments(
     segments: list[TranscriptSegment],
     source_language: str | None,
     target_language: str | None = None,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> list[TranscriptSegment]:
     """Translate transcript segment text and store it in translated_text."""
-    translated = translate_texts([segment.text for segment in segments], source_language, target_language)
+    translated = translate_texts(
+        [segment.text for segment in segments],
+        source_language,
+        target_language,
+        progress_callback=progress_callback,
+    )
 
     return [
         segment.model_copy(update={"translated_text": translation})

@@ -6,7 +6,6 @@ import { getApiError } from "../api/client";
 import { listJobs } from "../api/jobs";
 import PodcastNotesPanel from "../components/PodcastNotesPanel";
 import PodcastRecommendationsPanel from "../components/PodcastRecommendationsPanel";
-import SubscriptionSourcesPanel from "../components/SubscriptionSourcesPanel";
 
 export default function PodcastPage() {
   const [selectedJobId, setSelectedJobId] = useState("");
@@ -70,8 +69,6 @@ export default function PodcastPage() {
       </section>
 
       <PodcastRecommendationsPanel />
-
-      <SubscriptionSourcesPanel />
 
       <PodcastNotesPanel job={selectedJob} />
     </div>

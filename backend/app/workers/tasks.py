@@ -30,9 +30,7 @@ def _set_status(
     progress_percent: int | None = None,
 ) -> None:
     job.status = status
-    if status == "transcribing":
-        job.progress_percent = 0 if progress_percent is None else progress_percent
-    elif progress_percent is not None:
+    if progress_percent is not None:
         job.progress_percent = progress_percent
     if message:
         job.warning_message = message
@@ -40,10 +38,18 @@ def _set_status(
     logger.info("Job %s status -> %s", job.id, status)
 
 
-def _set_transcribing_progress(db: Session, job: models.Job, percent: int) -> None:
-    clamped = min(100, max(0, int(percent)))
+def _stage_progress(
+    db: Session,
+    job: models.Job,
+    stage_start: int,
+    stage_end: int,
+    stage_pct: int,
+) -> None:
+    """Compute overall progress from weighted stage boundaries and stage-internal 0-100 percent."""
+    overall = int(stage_start + (stage_end - stage_start) * stage_pct / 100)
+    clamped = min(100, max(0, overall))
     if job.progress_percent is not None and clamped < 100 and clamped <= job.progress_percent:
-        return
+        return  # never go backwards
     job.progress_percent = clamped
     db.commit()
 
@@ -98,21 +104,22 @@ def run_job(job_id: str) -> None:
 
         job.error_message = None
         job.completed_at = None
-        job.progress_percent = None
+        job.progress_percent = 0
         db.commit()
 
         if job.source_type == "url" and job.transcription_mode == "youtube_transcript":
+            # YouTube mode weights: transcribing(fetch)=0-20, correcting(repair)=20-85, translating=85-95, segmenting=95-100
             _set_status(db, job, "transcribing", progress_percent=0)
+            _stage_progress(db, job, 0, 20, 5)
             requested_language = None if job.language == "auto" else job.language
             transcript_segments = fetch_youtube_transcript(job.source_url or "", language=requested_language)
-            job.progress_percent = 35
-            db.commit()
+            _stage_progress(db, job, 0, 20, 100)
 
-            _set_status(db, job, "correcting", progress_percent=35)
+            _set_status(db, job, "correcting", progress_percent=20)
             transcript_segments, repair_warning = repair_youtube_transcript_segments(
                 transcript_segments,
                 infer_speakers=job.enable_diarization,
-                progress_callback=lambda percent: _set_transcribing_progress(db, job, 35 + round(percent * 0.55)),
+                progress_callback=lambda percent: _stage_progress(db, job, 20, 85, percent),
             )
             if repair_warning:
                 _append_warning(job, repair_warning)
@@ -121,17 +128,20 @@ def run_job(job_id: str) -> None:
             if job.enable_translation:
                 try:
                     _set_status(db, job, "translating")
+                    _stage_progress(db, job, 85, 95, 0)
                     detected_language = transcript_segments[0].language if transcript_segments else job.language
                     transcript_segments = translate_transcript_segments(
                         transcript_segments,
                         source_language=detected_language,
                         target_language=settings.translation_target_language,
+                        progress_callback=lambda percent: _stage_progress(db, job, 85, 95, percent),
                     )
                 except Exception as exc:
                     _append_warning(job, f"Translation skipped: {exc}")
                     db.commit()
 
             _set_status(db, job, "segmenting")
+            _stage_progress(db, job, 95, 100, 50)
             _persist_transcript(db, job, transcript_segments)
             detail = " with LLM speaker labeling" if job.enable_diarization else ""
             _append_warning(job, f"Used fast YouTube transcript/subtitle extraction{detail}; no HF/Whisper audio transcription was run.")
@@ -142,21 +152,28 @@ def run_job(job_id: str) -> None:
             logger.info("Job %s completed from YouTube transcript with %s segments", job.id, len(transcript_segments))
             return
 
+        # HF mode stage weights: downloading=0-5, extract=5-10, transcribe=10-50, correct=50-62,
+        #   diarize=62-77, align=77-85, translate=85-95, segment=95-100
         if job.source_type == "url" and not job.media_path:
             _set_status(db, job, "downloading")
+            _stage_progress(db, job, 0, 5, 5)
             output_dir = settings.storage_path / "downloads" / job.id
             job.media_path = download_audio_from_url(job.source_url or "", str(output_dir))
+            _stage_progress(db, job, 0, 5, 100)
             db.commit()
 
         if not job.media_path:
             raise RuntimeError("Job has no media file to process")
 
         _set_status(db, job, "extracting_audio")
+        _stage_progress(db, job, 5, 10, 5)
         audio_path = settings.storage_path / "audio" / f"{job.id}.wav"
         job.audio_path = extract_audio(job.media_path, str(audio_path))
+        _stage_progress(db, job, 5, 10, 100)
         db.commit()
 
-        _set_status(db, job, "transcribing", progress_percent=0)
+        _set_status(db, job, "transcribing", progress_percent=10)
+        _stage_progress(db, job, 10, 50, 0)
         requested_language = None if job.language == "auto" else job.language
         effective_model_size = "small" if job.m1_optimized else settings.whisper_model_size
         effective_compute_type = "int8" if job.m1_optimized else None
@@ -165,11 +182,15 @@ def run_job(job_id: str) -> None:
             language=requested_language,
             model_size=effective_model_size,
             compute_type=effective_compute_type,
-            progress_callback=lambda percent: _set_transcribing_progress(db, job, percent),
+            progress_callback=lambda percent: _stage_progress(db, job, 10, 50, percent),
         )
 
         _set_status(db, job, "correcting")
-        transcript_segments, correction_warning = correct_transcript_segments(transcript_segments)
+        _stage_progress(db, job, 50, 62, 0)
+        transcript_segments, correction_warning = correct_transcript_segments(
+            transcript_segments,
+            progress_callback=lambda percent: _stage_progress(db, job, 50, 62, percent),
+        )
         if correction_warning:
             _append_warning(job, correction_warning)
             db.commit()
@@ -181,14 +202,21 @@ def run_job(job_id: str) -> None:
             else:
                 try:
                     _set_status(db, job, "diarizing")
+                    _stage_progress(db, job, 62, 77, 5)
                     diarization_segments = diarize_audio(job.audio_path)
+                    _stage_progress(db, job, 62, 77, 100)
                 except Exception as exc:
                     _append_warning(job, f"Speaker diarization skipped: {exc}")
                     db.commit()
                 else:
                     if diarization_segments:
                         _set_status(db, job, "aligning")
-                        transcript_segments = assign_speakers_to_transcript(transcript_segments, diarization_segments)
+                        _stage_progress(db, job, 77, 85, 0)
+                        transcript_segments = assign_speakers_to_transcript(
+                            transcript_segments,
+                            diarization_segments,
+                            progress_callback=lambda percent: _stage_progress(db, job, 77, 85, percent),
+                        )
                     else:
                         _append_warning(job, "Speaker diarization returned no speaker segments.")
                         db.commit()
@@ -196,17 +224,20 @@ def run_job(job_id: str) -> None:
         if job.enable_translation:
             try:
                 _set_status(db, job, "translating")
+                _stage_progress(db, job, 85, 95, 0)
                 detected_language = transcript_segments[0].language if transcript_segments else job.language
                 transcript_segments = translate_transcript_segments(
                     transcript_segments,
                     source_language=detected_language,
                     target_language=settings.translation_target_language,
+                    progress_callback=lambda percent: _stage_progress(db, job, 85, 95, percent),
                 )
             except Exception as exc:
                 _append_warning(job, f"Translation skipped: {exc}")
                 db.commit()
 
         _set_status(db, job, "segmenting")
+        _stage_progress(db, job, 95, 100, 50)
         _persist_transcript(db, job, transcript_segments)
 
         job.status = "completed"

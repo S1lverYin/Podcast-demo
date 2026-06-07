@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from app.schemas import DiarizationSegment, TranscriptSegment
 
 
@@ -18,13 +20,15 @@ def _nearest_speaker(segment: TranscriptSegment, diarization_segments: list[Diar
 def assign_speakers_to_transcript(
     transcript_segments: list[TranscriptSegment],
     diarization_segments: list[DiarizationSegment],
+    progress_callback: Callable[[int], None] | None = None,
 ) -> list[TranscriptSegment]:
     """Assign speakers to ASR segments by maximum time overlap, falling back to nearest speaker."""
     if not diarization_segments:
         return transcript_segments
 
+    total = len(transcript_segments)
     assigned: list[TranscriptSegment] = []
-    for segment in transcript_segments:
+    for i, segment in enumerate(transcript_segments):
         overlaps = [
             (_overlap_seconds(segment.start, segment.end, speaker.start, speaker.end), speaker.speaker)
             for speaker in diarization_segments
@@ -32,4 +36,8 @@ def assign_speakers_to_transcript(
         best_overlap, speaker = max(overlaps, key=lambda item: item[0])
         assigned_speaker = speaker if best_overlap > 0 else _nearest_speaker(segment, diarization_segments)
         assigned.append(segment.model_copy(update={"speaker": assigned_speaker}))
+        if progress_callback and i % max(1, total // 20) == 0:
+            progress_callback(min(100, round((i + 1) / total * 100)))
+    if progress_callback:
+        progress_callback(100)
     return assigned

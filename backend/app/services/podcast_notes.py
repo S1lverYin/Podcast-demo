@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from typing import Any
 import httpx
 
 from app import models
+
+logger = logging.getLogger(__name__)
 from app.config import get_settings
 from app.services.downloader import _site_options, validate_public_http_url, yt_dlp_command
 
@@ -20,54 +23,181 @@ class PodcastNoteDraft:
 
 
 PODCAST_NOTES_SKILL_RULES = """
-# 播客笔记整理 Skill - official output format
+# 播客笔记整理 Skill
 
-你必须模仿用户提供的 podcast-notes skill 与 outputs/*.md 成品格式，而不是输出普通摘要或媒体解读文章。
+## 你的任务
 
-最终 Markdown 结构：
-1. 元数据头部（每行一条，不要加粗）：
-   整理 & 编译：深潮TechFlow
-   嘉宾：[嘉宾姓名，职位/身份]；[嘉宾2姓名，职位/身份]
-   主持人：[主持人姓名]
-   播客源：[播客节目或频道名称]
-   原标题：[播客/视频原始标题]
-   播出日期：[YYYY年M月D日]
-   如果没有嘉宾，省略"嘉宾："行，不要写"嘉宾：无"。不要添加 `[图片]` 占位。
-2. 空一行后写 `要点总结`，下一段用 3-5 句中文概括整期核心内容，不用 bullet points。
-3. 空一行后写 `精彩观点摘要`。按章节分组，每组格式为 `（章节小标题）`，组内用 `* "观点原文" ——说话人姓名` 列出 1-3 条精彩观点。
-4. 空一行后写完整对话正文。正文按 chapter_items 顺序逐章输出：
-   - 章节标题：只写小标题纯文本本身，不要用 `##`、`###`、`**加粗**` 或 bullet。
-   - 章节标题后直接接第一段对话，中间不空行。
-5. 最后一行：`原文链接：[URL]`；无 URL 则写 `原文链接：暂无`。
+将原始播客逐字稿整理成标准格式的中文播客笔记。输出必须包含：元数据头部 → 要点总结 → 精彩观点摘要 → 精彩片段 → 完整对话正文 → 原文链接。
 
-正文说话人格式：
-- 主持人：`主持人 [姓名]：[内容同行]` — 主持人标签、姓名和内容必须在同一行，不换行。
-- 嘉宾/非主持人：`[姓名]：` 单独占一行，说话内容另起一行。
-- 同一说话人连续多段内容合并为一段；切换说话人时才另起段。
-- 正文段落之间不添加空白行。
-- 不要使用 `**主持人 XXX**：` 或 `**嘉宾**：` 这类加粗 speaker 标签。
+---
 
-章节规则：
-- 严格使用 chapter_items 中提供的小标题和顺序。不得自行增减或重排章节。
-- 每个章节只整理该章节时间范围内的内容，不能跨章节串内容。
-- 如果 chapter_items 为空，整个正文作为一个无标题章节。
+## 输出格式（严格遵循此示例结构）
 
-内容处理：
-- 英文逐字稿翻译成自然流畅的中文，要像中文原创文章，不要翻译腔。
-- 删除口语填充词：like, uh, um, you know, right?, I mean, sort of, kind of 等。
-- 修正明显语音识别错误和口误，但不得改变说话人观点。
-- 保留专有名词原文或中文通用译名（如 Bitcoin→比特币，Ethereum→以太坊）。
-- 使用中文全角标点。
-- 广告、赞助、订阅呼吁片段跳过，不出现在正文中。
-- 单字确认回应如 "Yeah."、"Right."、"嗯。"、"对。" 合并到上下文中，不单独成段。
+```
+播客标题纯文本
 
-完整性与反幻觉：
-- 每一句正文都必须能在原始逐字稿或 source_metadata 中找到来源。
-- 不得凭记忆、推断或感觉补充内容。
-- 不得用概括代替正文整理；每个实质性观点、例子、推理都要保留。
-- 不得以篇幅为由跳过内容。
-- 如果 speaker_name_map 只有 speaker1、speaker2 等泛化标签，保持这些 fallback 标签，不要编造真实姓名。
-- 不要输出代码围栏（```）、JSON 或解释性文字。
+整理 & 编译：深潮TechFlow
+[图片]
+嘉宾：嘉宾姓名，职位/身份
+主持人：主持人姓名
+播客源：播客节目或频道名称
+原标题：播客/视频原始标题
+播出日期：YYYY年M月D日
+
+要点总结
+3-5句中文概括段落，不用 bullet points，直接写成一整段。
+
+精彩观点摘要
+关于第一个主题
+- "精彩观点原文引用，中文全角引号。"
+- "另一条观点。"
+
+关于第二个主题
+- "精彩观点。"
+
+## 精彩片段
+**Eric Trump**：
+这是一段精选的精彩对话。嘉宾姓名单独一行，内容另起一行。
+
+**主持人 Bonnie**：主持人的提问和内容在同一行。
+
+## 第一个章节标题
+**主持人 David**：主持人的内容和姓名标签在同一行。
+
+**Eric Trump**：
+嘉宾的说话内容另起一行。同一说话人的连续多段内容合并在一起。
+
+**主持人 Bonnie**：第二个问题。
+
+**Eric Trump**：
+第二个回答。
+
+## 第二个章节标题
+...（按章节顺序，直到全文结束）
+
+原文链接：https://...
+```
+
+---
+
+## 格式规则（严格遵守）
+
+### 元数据
+- 第一行：纯文本标题（不加 # 前缀），空一行后接元数据
+- `[图片]` 必须出现
+- 没有嘉宾时写 `嘉宾：无`（不省略此字段）
+
+### 要点总结
+- 一个自然段，3-5 句中文，不用 bullet points
+
+### 精彩观点摘要
+- 按主题分组，每组标题：`关于 [主题]`
+- 每条：`- "观点原文"`（中文全角引号），**不加**说话人姓名
+- 每组 1-4 条
+
+### 精彩片段
+- 正文前的高光片段：`## 精彩片段`
+- 挑选 2-5 轮最精彩的简短对话
+
+### 正文章节
+- 章节标题：`## 章节名称`（Markdown H2）
+- 严格按照提供的 chapter_items 顺序，不自行增减
+- 章节之间空一行
+
+### 说话人格式
+- **主持人**：`**主持人 Name**：内容同行`
+- **嘉宾**：`**Name**：` 单独一行，内容另起一行
+- 同一说话人连续多段合并
+- 切换说话人时空一行
+
+---
+
+## 处理步骤
+
+### 第一步：章节划分
+- 严格按照 chapter_items 的小标题和时间戳划分
+- 每个章节只处理该时间范围内的内容
+
+### 第二步：说话人识别
+判断依据（按优先级）：
+1. 上下文连贯性：同一话题的连续表达通常是同一人
+2. 问答结构：主持人提问/引导，嘉宾展开回答
+3. 第一人称陈述：结合嘉宾背景判断
+4. 称谓与回应："你刚才提到……"表示说话人切换
+5. 使用 speaker_name_map 中提供的映射
+
+### 第三步：逐章节处理（重要）
+长逐字稿必须按章节逐一处理，不得一次性处理全文：
+1. 取出第一个章节的原文段落
+2. 完成该章节的说话人识别 → 翻译 → 提炼精彩观点
+3. 追加到草稿
+4. 再取下一个章节，重复
+
+### 第四步：翻译与文字处理
+
+**必须做的**：
+- 翻译成自然流畅的中文——读起来像中文原创，不是翻译稿
+- 口语长段拆分为合理句子
+- 使用中文全角标点（，。！？；：""''……——）
+- 修正明显语音识别错误和口误
+- 保留专有名词原文或通用译名（Bitcoin→比特币，Ethereum→以太坊）
+- 合并简短互动回应：单独的 "Yeah."、"Right."、"嗯。"、"对。" 合并到上下文或省略，不单独成段
+
+**绝对不能做的**：
+- ❌ 不得翻译英文口语填充词：like, uh, um, you know（直接忽略）
+- ❌ "right?" 根据语境忽略，不译为"对吧"
+- ❌ "I mean" 根据语境处理，不机械译为"我的意思是"
+- ❌ "sort of", "kind of" 视语境处理
+- ❌ 不得字对字翻译，导致中文出现大量"就是""然后然后""像像像"
+
+**广告/赞助**：跳过，不出现在正文中。
+
+### 第五步：提炼精彩观点
+每个章节提炼 1-3 条最有代表性的观点，用于"精彩观点摘要"：
+- 来自原文，可做最小润色
+- 脱离上下文仍能独立理解
+- 优先嘉宾的洞见、金句、反常识观点
+
+### 第六步：撰写要点总结
+用 3-5 句概括整期核心内容，帮助读者快速判断是否值得深读。
+
+---
+
+## 内容完整性（最高优先级）
+
+- **禁止概括代替翻译**：每一个论点、例子、推理都必须完整出现在正文中
+- **禁止以篇幅为由跳过内容**：无论章节多长，必须完整整理
+- **禁止合并不相关内容**：不同观点不得压缩合并
+- **字数参照**：整理后中文字数 ≈ 原文英文单词数 × 0.6~0.8。如某章节过短，说明有遗漏
+
+---
+
+## 严禁杜撰（反幻觉）
+
+- 输出中每一句对话必须能在原始逐字稿中找到来源
+- 不得凭记忆、推断或感觉补充内容
+- 翻译改写幅度过大可能导致无意识杜撰——如意思已偏离原文，重新参照原文
+- speaker_name_map 只有 speaker1/speaker2 泛化标签时，保持它们，不编造真实姓名
+
+**每个章节完成后自检**：本章节正文中有没有原文未提及的内容？有则删除，替换为逐字稿原文。
+
+---
+
+## 质量检查清单
+
+完成后自检：
+- [ ] 章节数量与 chapter_items 一致，没有多出或缺少
+- [ ] 无 "like/uh/um/you know" 的残留翻译
+- [ ] 无单独 "是的""对""嗯" 的段落
+- [ ] 翻译通顺自然，无翻译腔
+- [ ] 要点总结是段落而非 bullet points
+- [ ] 主持人 `**主持人 Name**：` 内容同行；嘉宾 `**Name**：` 内容另起一行
+- [ ] 切换说话人时空一行
+- [ ] 所有实质性观点均在输出中呈现
+- [ ] 无杜撰或凭空添加的内容
+- [ ] 各章节内容对应正确时间段
+- [ ] 原文链接在最后
+- [ ] 不输出代码围栏或 JSON
 """.strip()
 
 
@@ -656,23 +786,27 @@ def generate_podcast_note(
         metadata["source_metadata"] = source_metadata
 
     system_prompt = (
-        "You are the podcast-notes skill inside VoiceScribe WebUI. The following skill rules are authoritative "
-        "and must be followed exactly. Use only the transcript as source. Do not invent facts, quotes, speaker identities, "
-        "sponsors, dates, or links. If metadata is missing, write 未填写. Use the provided speaker_name_map exactly. "
-        "If a speaker maps to speaker1, speaker2, etc., keep that fallback label and do not invent a real name. "
-        "Match the examples/output/*.md TechFlow article style as closely as possible.\n\n"
+        "You are the podcast-notes skill inside VoiceScribe WebUI. "
+        "Below are the authoritative SKILL RULES — follow them exactly. "
+        "Your output must match the format example. Process chapter by chapter, not all at once. "
+        "Translate naturally into Chinese. Never fabricate content. "
+        "Every sentence must be traceable to the source transcript.\n\n"
         f"{PODCAST_NOTES_SKILL_RULES}"
     )
     output_contract = [
-        "Start with the metadata block: 整理 & 编译：深潮TechFlow, optional 嘉宾, 主持人, 播客源, 原标题, 播出日期.",
-        "Do not add a fixed [图片] line. Omit 嘉宾 line when there is no guest.",
-        "Write 要点总结 as one paragraph of 3-5 Chinese sentences, not bullets.",
-        "Write 精彩观点摘要 as chapter groups: （chapter title） followed by * \"quote\" ——speaker bullets.",
-        "Write the full dialogue body after 精彩观点摘要, sectioned exactly by chapter_items order.",
-        "Body section titles are plain lines, not ## headings, not bullets, and not bold.",
-        "Host lines must be '主持人 Name：content' on one line. Guest/non-host lines must be 'Name：' on one line, then content on the next line.",
-        "No blank lines between dialogue paragraphs inside the body.",
-        "End with 原文链接：[URL] or 原文链接：暂无.",
+        "Follow the SKILL RULES format precisely.",
+        "Plain-text title → blank line → metadata block (with [图片], 嘉宾：无 if no guest).",
+        "要点总结: one paragraph, 3-5 sentences, no bullets.",
+        "精彩观点摘要: 关于 topic groups, - \"quote\" format, NO speaker attribution.",
+        "## 精彩片段 section: 2-5 highlighted exchanges before full dialogue.",
+        "Body chapters: ## Title H2, in chapter_items order, blank line between chapters.",
+        "Host: **主持人 Name**：content SAME line.",
+        "Guest: **Name**：on own line, content NEXT line.",
+        "Blank line between speaker turns.",
+        "No filler words (like/uh/um/you know). Merge single-word acknowledgments.",
+        "No summarization-as-translation. Every argument/example must appear in full.",
+        "Self-check each chapter: nothing fabricated, nothing skipped.",
+        "End with 原文链接：[URL].",
     ]
 
     user_prompt = {
@@ -683,9 +817,11 @@ def generate_podcast_note(
         "source_metadata": source_metadata,
         "output_contract": output_contract,
         "speaker_notes": [
-            "If host/guest names include mappings such as SPEAKER_00=姓名 or Speaker 1=Alice, apply them strictly.",
-            "If the speaker_name_map has only speaker1, speaker2 generic labels, use them as-is without inventing real names.",
-            "The first speaker in the transcript is typically the host unless host metadata says otherwise.",
+            "Apply speaker_name_map strictly. If it says Speaker 1 → 主持人 Bonnie, use that exact name.",
+            "If speaker_name_map has only speaker1, speaker2 generic labels, use those as-is — do not invent real names.",
+            "To identify who is speaking: follow context continuity, Q&A structure (host asks, guest answers), first-person statements, and cross-references like 'you just mentioned'.",
+            "The first speaker in the transcript is typically the host unless metadata indicates otherwise.",
+            "When transcript has >> symbols, treat them as possible speaker change points.",
         ],
         "transcript": _segment_lines(segments, speaker_name_map),
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -703,3 +839,169 @@ def generate_podcast_note(
         markdown=markdown,
         metadata_json=json.dumps(metadata, ensure_ascii=False),
     )
+
+
+def autofill_speakers(
+    job: models.Job,
+    segments: list[models.TranscriptSegment],
+) -> dict[str, str]:
+    """Auto-fill host and guest speaker names from source metadata + transcript.
+
+    Returns dict with keys "host" (；-separated for multi-host), "guests" (newline-separated),
+    and metadata fields.
+    """
+    hosts: list[str] = []
+    guests_list: list[str] = []
+
+    # 1. Source metadata via yt-dlp
+    source_metadata: dict[str, Any] = {}
+    if job.source_url and _clean_text(job.source_url):
+        try:
+            source_metadata = _fetch_source_metadata(job.source_url)
+        except Exception:
+            logger.debug("autofill_speakers: yt-dlp metadata fetch failed, continuing without it")
+
+    channel_host = ""
+    description = ""
+    if source_metadata:
+        channel_host = _clean_text(
+            source_metadata.get("channel")
+            or source_metadata.get("uploader")
+            or source_metadata.get("creator")
+            or source_metadata.get("series")
+            or ""
+        )
+        description = _clean_text(source_metadata.get("description") or "")
+
+    # 2. LLM analysis: identify ALL speakers from transcript content + description
+    try:
+        provider, base_url, api_key, model = _api_config()
+    except Exception:
+        provider = None
+
+    if provider and segments:
+        # Build a sample of the transcript for the LLM to analyze
+        sample_lines: list[str] = []
+        for s in segments[:30]:
+            sample_lines.append(f"[{_format_timestamp(s.start)}] {_clean_text(s.text)[:200]}")
+        transcript_sample = "\n".join(sample_lines)
+
+        llm_system = (
+            "You analyze a podcast transcript to identify every speaker. "
+            "Look for self-introductions (\"I'm X\", \"my name is X\", \"我是X\"), "
+            "third-party introductions (\"joining us is X\", \"welcome X\", \"今天请到了X\"), "
+            "and conversational roles (who asks questions vs who gives long answers). "
+            "A show may have MULTIPLE hosts and MULTIPLE guests. "
+            "Hosts: introduce topics, ask questions, facilitate the conversation. "
+            "Guests: share expertise, answer questions, tell their story. "
+            "Return JSON only: {\"hosts\": [\"name\"], \"guests\": [\"name\"]}. "
+            "Use the name as spoken (e.g. \"David\" not \"David Lin\" unless the full name is clearly stated). "
+            "If no one is clearly identified, return empty arrays. Do NOT invent names."
+        )
+        llm_prompt: dict[str, Any] = {
+            "transcript_sample": transcript_sample[:4000],
+            "video_description": description[:1000] if description else "",
+            "instruction": "Identify every host and guest from the transcript content. Look for self-introductions and third-party introductions.",
+        }
+        try:
+            content = (
+                _anthropic_completion(base_url, api_key, model, llm_system, llm_prompt)
+                if provider == "anthropic"
+                else _openai_compatible_completion(base_url, api_key, model, llm_system, llm_prompt)
+            )
+            payload = _extract_json_payload(content)
+            if isinstance(payload, dict):
+                def _parse_names(raw: Any) -> list[str]:
+                    if isinstance(raw, str):
+                        return [_clean_text(raw)] if _clean_text(raw) else []
+                    if isinstance(raw, list):
+                        return [_clean_text(n) for n in raw if _clean_text(n)]
+                    return []
+
+                llm_hosts = _parse_names(payload.get("hosts") or payload.get("host"))
+                llm_guests = _parse_names(payload.get("guests") or payload.get("guest"))
+
+                if llm_hosts:
+                    hosts = llm_hosts
+                if llm_guests:
+                    guests_list = llm_guests
+        except Exception:
+            logger.debug("autofill_speakers: LLM transcript analysis failed, trying description fallback")
+
+    # 3. Fallback: LLM description-only analysis (if transcript analysis didn't find anything)
+    if not hosts and not guests_list and description and provider:
+        llm_system2 = (
+            "Extract host and guest names from this video description. "
+            "Return JSON only: {\"hosts\": [\"name\"], \"guests\": [\"name\"]}. "
+            "Empty arrays if unclear. Do not invent."
+        )
+        try:
+            content2 = (
+                _anthropic_completion(base_url, api_key, model, llm_system2, {"description": description})
+                if provider == "anthropic"
+                else _openai_compatible_completion(base_url, api_key, model, llm_system2, {"description": description})
+            )
+            payload2 = _extract_json_payload(content2)
+            if isinstance(payload2, dict):
+                for h in (payload2.get("hosts") or payload2.get("host") or []):
+                    h = _clean_text(h) if isinstance(h, str) else ""
+                    if h and h not in hosts:
+                        hosts.append(h)
+                for g in (payload2.get("guests") or payload2.get("guest") or []):
+                    g = _clean_text(g) if isinstance(g, str) else ""
+                    if g and g not in guests_list:
+                        guests_list.append(g)
+        except Exception:
+            logger.debug("autofill_speakers: LLM description fallback also failed")
+
+    # 4. Fallback: regex-based transcript detection for any missed names
+    if segments:
+        speaker_name_map = _build_speaker_name_map(
+            segments, host=None, guests=None, auto_detect_names=True,
+        )
+        if speaker_name_map:
+            for label in _speaker_labels(segments):
+                display = speaker_name_map.get(label, label)
+                if display and not _is_generic_speaker_label(display):
+                    if display not in hosts and display not in guests_list:
+                        if not hosts:
+                            hosts.append(display)
+                        else:
+                            guests_list.append(display)
+
+    # 5. Last resort: nothing found
+    if not hosts and not guests_list:
+        logger.info("autofill_speakers: no speakers identified for job %s", job.id)
+
+    logger.info(
+        "autofill_speakers job=%s hosts=%r guests=%r",
+        job.id,
+        hosts,
+        guests_list,
+    )
+
+    # 5. Extract metadata
+    published_date = ""
+    if source_metadata:
+        published_date = (
+            source_metadata.get("release_date")
+            or source_metadata.get("upload_date")
+            or ""
+        )
+
+    original_title = ""
+    if source_metadata:
+        original_title = _clean_text(
+            source_metadata.get("title")
+            or source_metadata.get("fulltitle")
+            or ""
+        )
+
+    return {
+        "host": "；".join(hosts),
+        "guests": "\n".join(guests_list),
+        "podcast_source": channel_host or "",
+        "original_title": original_title,
+        "published_date": published_date,
+        "source_url": source_metadata.get("webpage_url") or _clean_text(job.source_url or "") or "",
+    }

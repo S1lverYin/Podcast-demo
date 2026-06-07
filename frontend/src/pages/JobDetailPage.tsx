@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, BookOpen, Languages, Loader2, Podcast, RotateCcw, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, BookOpen, Languages, Loader2, Podcast, RotateCcw, Trash2, Users } from "lucide-react";
 
 import { getApiError } from "../api/client";
 import {
   clearTranscript,
   deleteJob,
+  diarizeJob,
   getJob,
   getParagraphs,
   getSegments,
@@ -22,22 +23,8 @@ import JobStatusBadge from "../components/JobStatusBadge";
 import ParagraphViewer from "../components/ParagraphViewer";
 import PodcastNotesPanel from "../components/PodcastNotesPanel";
 import TranscriptEditor from "../components/TranscriptEditor";
-import type { JobStatus, ParagraphingMode, TranscriptParagraph, TranscriptSegment, TranslationLanguage } from "../types/job";
+import type { ParagraphingMode, TranscriptParagraph, TranscriptSegment, TranslationLanguage } from "../types/job";
 import { parseServerDate } from "../utils/date";
-
-const progressByStatus: Record<JobStatus, number> = {
-  queued: 8,
-  downloading: 20,
-  extracting_audio: 35,
-  transcribing: 62,
-  correcting: 70,
-  diarizing: 80,
-  aligning: 88,
-  translating: 92,
-  segmenting: 96,
-  completed: 100,
-  failed: 100,
-};
 
 const NO_SPEAKER_LABEL = "无说话人";
 const TRANSLATION_LANGUAGE_OPTIONS: { value: TranslationLanguage; label: string }[] = [
@@ -133,6 +120,14 @@ export default function JobDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["segments", jobId] });
       queryClient.invalidateQueries({ queryKey: ["paragraphs", jobId] });
       queryClient.invalidateQueries({ queryKey: ["podcast-notes", jobId] });
+    },
+  });
+
+  const diarizeMutation = useMutation({
+    mutationFn: () => diarizeJob(jobId ?? ""),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["segments", jobId] });
+      queryClient.invalidateQueries({ queryKey: ["paragraphs", jobId] });
     },
   });
 
@@ -260,12 +255,9 @@ export default function JobDetailPage() {
   }
 
   const job = jobQuery.data;
-  const transcriptionProgress = job.status === "transcribing" && typeof job.progress_percent === "number"
-    ? Math.round(job.progress_percent)
-    : null;
-  const progress = transcriptionProgress === null
-    ? progressByStatus[job.status]
-    : Math.min(70, Math.max(35, 35 + transcriptionProgress * 0.35));
+  const progress = typeof job.progress_percent === "number"
+    ? job.progress_percent
+    : job.status === "completed" ? 100 : 0;
   const canExport = segments.length > 0;
 
   return (
@@ -288,6 +280,21 @@ export default function JobDetailPage() {
             >
               <RotateCcw size={15} aria-hidden="true" />
               重试
+            </button>
+          ) : null}
+          {segments.length > 0 && !segments.some((s) => s.speaker) ? (
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:border-fuchsia-500 hover:text-fuchsia-700 disabled:opacity-50"
+              type="button"
+              disabled={diarizeMutation.isPending}
+              onClick={() => diarizeMutation.mutate()}
+            >
+              {diarizeMutation.isPending ? (
+                <Loader2 className="animate-spin" size={15} aria-hidden="true" />
+              ) : (
+                <Users size={15} aria-hidden="true" />
+              )}
+              {diarizeMutation.isPending ? "说话人分离中…" : "说话人分离"}
             </button>
           ) : null}
           <button
@@ -332,8 +339,8 @@ export default function JobDetailPage() {
         </div>
 
         <div className="mb-2 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
-          <span>{job.status === "transcribing" ? "Transcribing progress" : "Workflow progress"}</span>
-          <span>{transcriptionProgress === null ? `${progress}%` : `${transcriptionProgress}%`}</span>
+          <span>Workflow progress</span>
+          <span>{progress}%</span>
         </div>
 
         <div className="mb-4 h-2 overflow-hidden rounded-md bg-slate-100">

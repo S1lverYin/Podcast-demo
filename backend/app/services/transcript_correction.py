@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from collections.abc import Callable
 from typing import Any, TypeVar
 
 import httpx
@@ -189,7 +190,10 @@ def _sanitize_corrections(payload: Any, originals: list[TranscriptSegment]) -> d
     return corrections
 
 
-def _llm_correct_segments(segments: list[TranscriptSegment]) -> list[TranscriptSegment]:
+def _llm_correct_segments(
+    segments: list[TranscriptSegment],
+    progress_callback: Callable[[int], None] | None = None,
+) -> list[TranscriptSegment]:
     settings = get_settings()
     provider, base_url, api_key, model = _api_config()
     batch_size = max(10, min(settings.transcript_correction_batch_size, 220))
@@ -209,7 +213,9 @@ def _llm_correct_segments(segments: list[TranscriptSegment]) -> list[TranscriptS
         or "常见中文历史词：朱元璋、朱棣、朱允炆、大明、明朝、永乐盛世、郑和下西洋、好望角、靖难之役、东厂、削藩、建群、群名。"
     )
 
-    for batch in _chunks(segments, batch_size):
+    batches = _chunks(segments, batch_size)
+    total_batches = len(batches)
+    for batch_index, batch in enumerate(batches):
         items = [
             {
                 "id": index,
@@ -240,12 +246,15 @@ def _llm_correct_segments(segments: list[TranscriptSegment]) -> list[TranscriptS
             segment.model_copy(update={"text": corrections.get(index, segment.text)})
             for index, segment in enumerate(batch)
         )
+        if progress_callback:
+            progress_callback(round((batch_index + 1) / total_batches * 100))
 
     return corrected_segments
 
 
 def correct_transcript_segments(
     segments: list[TranscriptSegment],
+    progress_callback: Callable[[int], None] | None = None,
 ) -> tuple[list[TranscriptSegment], str | None]:
     """Correct ASR transcript text while preserving timestamps and speakers."""
     settings = get_settings()
@@ -264,7 +273,7 @@ def correct_transcript_segments(
         return rule_corrected, None
 
     try:
-        return _llm_correct_segments(rule_corrected), None
+        return _llm_correct_segments(rule_corrected, progress_callback=progress_callback), None
     except Exception as exc:
         logger.warning("LLM transcript correction failed; using rule corrections: %s", exc)
         return rule_corrected, f"LLM transcript correction skipped; rule corrections were used. {exc}"
