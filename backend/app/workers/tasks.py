@@ -203,7 +203,8 @@ def run_job(job_id: str) -> None:
                 try:
                     _set_status(db, job, "diarizing")
                     _stage_progress(db, job, 62, 77, 5)
-                    diarization_segments = diarize_audio(job.audio_path)
+                    hint = [{"start": s.start, "end": s.end, "text": s.text} for s in transcript_segments[:50]]
+                    diarization_segments = diarize_audio(job.audio_path, transcript_hint=hint)
                     _stage_progress(db, job, 62, 77, 100)
                 except Exception as exc:
                     _append_warning(job, f"Speaker diarization skipped: {exc}")
