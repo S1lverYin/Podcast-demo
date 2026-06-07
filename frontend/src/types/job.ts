@@ -22,6 +22,7 @@ export type Job = {
   language: string;
   enable_diarization: boolean;
   enable_translation: boolean;
+  m1_optimized: boolean;
   error_message: string | null;
   warning_message: string | null;
   created_at: string;
@@ -96,6 +97,7 @@ export type CreateUrlJobPayload = {
   language: string;
   enable_diarization: boolean;
   enable_translation: boolean;
+  m1_optimized: boolean;
 };
 
 export type JobQueuedResponse = {

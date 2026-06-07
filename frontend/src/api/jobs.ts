@@ -16,6 +16,7 @@ export type JobOptions = {
   language: string;
   enableDiarization: boolean;
   enableTranslation: boolean;
+  m1Optimized: boolean;
 };
 
 export type RegenerateParagraphOptions = {
@@ -29,6 +30,7 @@ export async function uploadJob(file: File, options: JobOptions): Promise<JobQue
   formData.append("language", options.language);
   formData.append("enable_diarization", String(options.enableDiarization));
   formData.append("enable_translation", String(options.enableTranslation));
+  formData.append("m1_optimized", String(options.m1Optimized));
   const response = await apiClient.post<JobQueuedResponse>("/jobs/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });

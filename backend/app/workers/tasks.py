@@ -63,10 +63,13 @@ def run_job(job_id: str) -> None:
 
         _set_status(db, job, "transcribing")
         requested_language = None if job.language == "auto" else job.language
+        effective_model_size = "small" if job.m1_optimized else settings.whisper_model_size
+        effective_compute_type = "int8" if job.m1_optimized else None
         transcript_segments = transcribe_audio(
             job.audio_path,
             language=requested_language,
-            model_size=settings.whisper_model_size,
+            model_size=effective_model_size,
+            compute_type=effective_compute_type,
         )
 
         _set_status(db, job, "correcting")

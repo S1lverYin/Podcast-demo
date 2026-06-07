@@ -13,8 +13,17 @@ def transcribe_audio(
     audio_path: str,
     language: str | None = None,
     model_size: str = "large-v3",
+    compute_type: str | None = None,
 ) -> list[TranscriptSegment]:
-    """Transcribe an audio file with faster-whisper and return timestamped segments."""
+    """Transcribe an audio file with faster-whisper and return timestamped segments.
+
+    Args:
+        audio_path: Path to 16kHz mono WAV file.
+        language: Language code or None for auto-detect.
+        model_size: faster-whisper model size (tiny, base, small, medium, large-v3).
+        compute_type: Optional override for faster-whisper compute_type (e.g. "int8").
+                      When None, falls back to the global WHISPER_COMPUTE_TYPE setting.
+    """
     os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
     try:
         from faster_whisper import WhisperModel
@@ -23,11 +32,12 @@ def transcribe_audio(
 
     settings = get_settings()
     load_started = time.perf_counter()
-    logger.info("Loading faster-whisper model '%s'", model_size)
+    effective_compute_type = compute_type or settings.whisper_compute_type
+    logger.info("Loading faster-whisper model '%s' (compute_type=%s)", model_size, effective_compute_type)
     model = WhisperModel(
         model_size,
         device=settings.whisper_device,
-        compute_type=settings.whisper_compute_type,
+        compute_type=effective_compute_type,
     )
     logger.info("Loaded faster-whisper model in %.2fs", time.perf_counter() - load_started)
 

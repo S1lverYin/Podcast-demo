@@ -183,8 +183,8 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 py-6">
-      <div className="w-full max-w-lg rounded-md border border-slate-200 bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-md border border-slate-200 bg-white shadow-xl">
+        <div className="shrink-0 flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div className="flex items-center gap-2">
             <KeyRound size={18} aria-hidden="true" />
             <h2 className="text-base font-semibold text-slate-950">设置</h2>
@@ -205,7 +205,8 @@ export default function SettingsDialog({ open, onClose }: Props) {
             加载设置
           </div>
         ) : (
-          <form className="space-y-4 p-5" onSubmit={handleSubmit}>
+          <form className="flex flex-col overflow-y-auto" onSubmit={handleSubmit}>
+            <div className="space-y-4 p-5">
             <label className="block text-sm font-medium text-slate-700">
               默认语段模式
               <select
@@ -363,8 +364,9 @@ export default function SettingsDialog({ open, onClose }: Props) {
                 {getApiError(settingsQuery.error ?? updateMutation.error)}
               </div>
             ) : null}
+            </div>
 
-            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4">
+            <div className="shrink-0 flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
               <button
                 className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:border-emerald-500 hover:text-emerald-700"
                 type="button"

@@ -25,47 +25,49 @@ PODCAST_NOTES_SKILL_RULES = """
 你必须模仿用户提供的 podcast-notes skill 与 outputs/*.md 成品格式，而不是输出普通摘要或媒体解读文章。
 
 最终 Markdown 结构：
-1. 元数据头部：
+1. 元数据头部（每行一条，不要加粗）：
    整理 & 编译：深潮TechFlow
-   嘉宾：[嘉宾1，职位]；[嘉宾2，职位]
+   嘉宾：[嘉宾姓名，职位/身份]；[嘉宾2姓名，职位/身份]
    主持人：[主持人姓名]
-   播客源：[播客节目名称]
-   原标题：[播客原标题]
+   播客源：[播客节目或频道名称]
+   原标题：[播客/视频原始标题]
    播出日期：[YYYY年M月D日]
-   如果没有嘉宾，省略“嘉宾：”行；不要写“嘉宾：无”。不要固定添加 `[图片]`。
-2. 空行后写 `要点总结`，下一段写 3-5 句中文概括文字，不用 bullet points。
-3. 空行后写 `精彩观点摘要`。每个章节使用 `（小标题）` 分组，组内用 `* "观点" ——说话人` 列出 1-3 条精彩观点。
-4. 空行后写完整对话正文。正文按 chapter_items 顺序逐章输出，章节标题只写小标题本身，不使用 `##`、`###`、bullet 或加粗。
-5. 最后一行：`原文链接：[URL]`；如果没有 URL，写 `原文链接：暂无`。
+   如果没有嘉宾，省略"嘉宾："行，不要写"嘉宾：无"。不要添加 `[图片]` 占位。
+2. 空一行后写 `要点总结`，下一段用 3-5 句中文概括整期核心内容，不用 bullet points。
+3. 空一行后写 `精彩观点摘要`。按章节分组，每组格式为 `（章节小标题）`，组内用 `* "观点原文" ——说话人姓名` 列出 1-3 条精彩观点。
+4. 空一行后写完整对话正文。正文按 chapter_items 顺序逐章输出：
+   - 章节标题：只写小标题纯文本本身，不要用 `##`、`###`、`**加粗**` 或 bullet。
+   - 章节标题后直接接第一段对话，中间不空行。
+5. 最后一行：`原文链接：[URL]`；无 URL 则写 `原文链接：暂无`。
 
 正文说话人格式：
-- 主持人：`主持人 [姓名]：[内容同行]`，主持人姓名与内容必须在同一行。
-- 嘉宾/非主持人：`[姓名]：` 单独一行，内容另起一行。
-- 同一人连续说话要合并为一段；说话人切换时另起段。
-- 正文段落之间不要加空白行；章节标题后直接接第一段对话。
-- 不要使用 `**主持人 XXX**：`、`**嘉宾**：` 这类加粗标签。
+- 主持人：`主持人 [姓名]：[内容同行]` — 主持人标签、姓名和内容必须在同一行，不换行。
+- 嘉宾/非主持人：`[姓名]：` 单独占一行，说话内容另起一行。
+- 同一说话人连续多段内容合并为一段；切换说话人时才另起段。
+- 正文段落之间不添加空白行。
+- 不要使用 `**主持人 XXX**：` 或 `**嘉宾**：` 这类加粗 speaker 标签。
 
 章节规则：
-- 严格使用 chapter_items 中的小标题和顺序。不得自行增减章节。
+- 严格使用 chapter_items 中提供的小标题和顺序。不得自行增减或重排章节。
 - 每个章节只整理该章节时间范围内的内容，不能跨章节串内容。
-- 如果 chapter_items 为空，使用一个正文章节。
+- 如果 chapter_items 为空，整个正文作为一个无标题章节。
 
 内容处理：
-- 英文逐字稿要翻译成自然流畅中文，像中文原创，不要翻译腔。
-- 删除口语填充词 like、uh、um、you know、right? 等。
-- 修正明显语音识别错误和口误，但不得改变观点。
-- 保留专有名词原文或通用译名。
+- 英文逐字稿翻译成自然流畅的中文，要像中文原创文章，不要翻译腔。
+- 删除口语填充词：like, uh, um, you know, right?, I mean, sort of, kind of 等。
+- 修正明显语音识别错误和口误，但不得改变说话人观点。
+- 保留专有名词原文或中文通用译名（如 Bitcoin→比特币，Ethereum→以太坊）。
 - 使用中文全角标点。
-- 广告/赞助段落跳过，不出现在正文中。
-- 单字确认如 "Yeah."、"Right."、"嗯。"、"对。" 不要单独成段，应合并或省略。
+- 广告、赞助、订阅呼吁片段跳过，不出现在正文中。
+- 单字确认回应如 "Yeah."、"Right."、"嗯。"、"对。" 合并到上下文中，不单独成段。
 
 完整性与反幻觉：
 - 每一句正文都必须能在原始逐字稿或 source_metadata 中找到来源。
 - 不得凭记忆、推断或感觉补充内容。
 - 不得用概括代替正文整理；每个实质性观点、例子、推理都要保留。
 - 不得以篇幅为由跳过内容。
-- 如果 speaker_name_map 只有 speaker1、speaker2，不要编造真实姓名。
-- 不要输出代码围栏、JSON 或解释。
+- 如果 speaker_name_map 只有 speaker1、speaker2 等泛化标签，保持这些 fallback 标签，不要编造真实姓名。
+- 不要输出代码围栏（```）、JSON 或解释性文字。
 """.strip()
 
 
@@ -107,9 +109,15 @@ def _chapter_items_from_outline(outline: str) -> list[dict[str, str]]:
 
 def _is_generic_speaker_label(value: str | None) -> bool:
     label = _clean_text(value)
-    return not label or label.upper() == "UNKNOWN" or bool(
-        re.fullmatch(r"(?:SPEAKER[_\s-]?|Speaker\s*)\d+", label, flags=re.IGNORECASE)
-    )
+    if not label or label.upper() == "UNKNOWN":
+        return True
+    # Match SPEAKER_00, SPEAKER 00, speaker_00, Speaker 1, speaker1, SPEAKER00, etc.
+    if bool(re.fullmatch(r"(?:SPEAKER[_\s-]?|Speaker\s*)\d+", label, flags=re.IGNORECASE)):
+        return True
+    # Match bare digits like "0", "1", "00", "01"
+    if bool(re.fullmatch(r"\d{1,3}", label)):
+        return True
+    return False
 
 
 def _speaker_labels(segments: list[models.TranscriptSegment]) -> list[str]:
@@ -124,12 +132,25 @@ def _speaker_labels(segments: list[models.TranscriptSegment]) -> list[str]:
 
 
 def _parse_explicit_speaker_mappings(*texts: str | None) -> dict[str, str]:
+    """Parse explicit speaker mappings from user input.
+
+    Supports formats like:
+      - SPEAKER_00=姓名
+      - Speaker 1=姓名
+      - speaker_00: 姓名
+      - SPEAKER_00：姓名（职位）
+    """
     mappings: dict[str, str] = {}
-    pattern = re.compile(r"\b(SPEAKER[_\s-]?\d+|speaker\s*\d+)\b\s*[=:：-]\s*([^,，;\n；]+)", re.IGNORECASE)
+    # Broader pattern: match "Speaker 1=Name" or "SPEAKER_00：姓名" with optional role/position after name
+    pattern = re.compile(
+        r"\b(SPEAKER[_\s-]?\d+|Speaker\s*\d+|speaker[_\s-]?\d+)\b\s*[=:：]\s*([^,，;\n；]+?)(?:[，,](?:[^=:：\n])*)?$",
+        re.IGNORECASE | re.MULTILINE,
+    )
     for text in texts:
         for raw_label, raw_name in pattern.findall(text or ""):
             label = raw_label.replace(" ", "_").replace("-", "_").upper()
-            name = _clean_text(raw_name).strip("：:，,。.;； ")
+            # Strip trailing role/position in parens
+            name = _clean_text(re.sub(r"[（(][^)）]*[)）]$", "", raw_name)).strip("：:，,。.;； ")
             if name:
                 mappings[label] = name
     return mappings
@@ -140,33 +161,46 @@ def _speaker_mapping_key(label: str) -> str:
 
 
 def _candidate_from_intro(text: str) -> str | None:
+    """Extract a likely speaker name from self-introduction or third-party introduction text."""
     normalized = _clean_text(text)
-    patterns = [
-        r"(?:我是|我叫|我是主持人|这里是)\s*([\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z·.\s-]{1,24})(?:[，。,.!！?？]|$)",
-        r"(?:my name is|this is|i['’]?m|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})(?:[,.!?]|$)",
-    ]
     reject_fragments = (
-        "一个",
-        "一名",
-        "今天",
-        "这里",
-        "来自",
-        "觉得",
-        "认为",
-        "going",
-        "not",
-        "really",
-        "very",
-        "just",
+        "一个", "一名", "今天", "这里", "来自", "觉得", "认为",
+        "going", "not", "really", "very", "just", "maybe",
+        "大家好", "欢迎", "各位", "朋友",
     )
-    for pattern in patterns:
+
+    patterns_cn = [
+        # Self-intro: "我是/我叫/我是主持人/etc"
+        r"(?:我是|我叫|我是主持人|我是嘉宾|这里是|我是[^\s,，。.!！?？]{0,6}的)\s*([一-鿿A-Za-z][一-鿿A-Za-z·.\s-]{1,24})(?:[，,。.、!！?？\s]|$)",
+        # Third-party: "这位是..."
+        r"这位是\s*([一-鿿A-Za-z][一-鿿A-Za-z·.\s-]{1,24})(?:[，,。.、!！?？\s]|$)",
+        # "今天我们请到了..."
+        r"今天我们?请到[了]?\s*([一-鿿A-Za-z][一-鿿A-Za-z·.\s-]{1,24})(?:[，,。.、!！?？\s]|$)",
+        # "欢迎XXX来到/做客"
+        r"欢迎\s*([一-鿿A-Za-z][一-鿿A-Za-z·.\s-]{1,24})(?:来到|做客|参加|加入|光临)",
+        # "有请..."
+        r"有请\s*([一-鿿A-Za-z][一-鿿A-Za-z·.\s-]{1,24})(?:[，,。.、!！?？\s]|$)",
+    ]
+    patterns_en = [
+        r"(?:my name is|this is|i['’]?m|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})(?:[,.!?]|$)",
+        r"joining us\s+(?:today\s+)?(?:is|are)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})",
+        r"please welcome\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})",
+    ]
+
+    for pattern in patterns_cn + patterns_en:
         match = re.search(pattern, normalized, flags=re.IGNORECASE)
         if not match:
             continue
         candidate = _clean_text(match.group(1)).strip("：:，,。.;； ")
+        if not candidate:
+            continue
+        if not re.search(r"[一-鿿A-Za-z]", candidate):
+            continue
+        if len(candidate) > 30:
+            continue
         if any(fragment.lower() in candidate.lower() for fragment in reject_fragments):
             continue
-        if re.fullmatch(r"[\u4e00-\u9fff]{2,4}", candidate):
+        if re.fullmatch(r"[一-鿿]{2,4}", candidate):
             return candidate
         if re.fullmatch(r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}", candidate):
             return candidate
@@ -179,34 +213,79 @@ def _build_speaker_name_map(
     guests: str | None = None,
     auto_detect_names: bool = True,
 ) -> dict[str, str]:
+    """Build a mapping from raw speaker labels to display names.
+
+    Priority order:
+    1. Explicit mappings from host/guests fields (e.g. "SPEAKER_00=Alice")
+    2. Non-generic labels from diarization (e.g. pyannote sometimes returns actual names)
+    3. Auto-detect from self-introduction text (e.g. "Hi I'm Alice, welcome to...")
+    4. Fallback: speaker1, speaker2, ...
+    """
     labels = _speaker_labels(segments)
     explicit = _parse_explicit_speaker_mappings(host, guests)
     by_label: dict[str, list[str]] = {label: [] for label in labels}
     for segment in segments:
         label = _clean_text(segment.speaker) or "UNKNOWN"
-        if label in by_label and len(by_label[label]) < 40:
+        if label in by_label and len(by_label[label]) < 60:
             by_label[label].append(segment.text)
 
     result: dict[str, str] = {}
     used_names: set[str] = set()
+
     for index, label in enumerate(labels, start=1):
         key = _speaker_mapping_key(label)
+
+        # 1. Explicit user-provided mapping
         if key in explicit:
             result[label] = explicit[key]
+        # 2. Non-generic label (e.g. pyannote returned a real name or YouTube captions gave a name)
         elif auto_detect_names and not _is_generic_speaker_label(label):
             result[label] = label
+        # 3. Auto-detect from self-introduction
         elif auto_detect_names:
-            inferred = next(
-                (candidate for candidate in (_candidate_from_intro(text) for text in by_label.get(label, [])) if candidate),
-                None,
-            )
+            # Try all text samples from this speaker for name candidates
+            inferred = None
+            for text in by_label.get(label, []):
+                inferred = _candidate_from_intro(text)
+                if inferred:
+                    break
+            # If no self-intro found, check if label appears as a name in other speakers' intro text
+            if not inferred:
+                for other_label, texts in by_label.items():
+                    if other_label == label:
+                        continue
+                    for text in texts:
+                        inferred = _candidate_from_intro(text)
+                        if inferred and index > 1:
+                            break
+                    if inferred:
+                        break
             result[label] = inferred or f"speaker{index}"
+        # 4. Auto-detect off: use generic fallback
         else:
             result[label] = f"speaker{index}"
 
+        # Deduplicate: if two labels map to the same name, keep first, fallback to generics for later ones
         if result[label] in used_names:
-            result[label] = f"speaker{index}"
+            # Try to find an alternative candidate
+            alt = None
+            for text in by_label.get(label, [])[1:]:
+                alt = _candidate_from_intro(text)
+                if alt and alt not in used_names:
+                    break
+            if alt and alt not in used_names:
+                result[label] = alt
+            else:
+                result[label] = f"speaker{index}"
         used_names.add(result[label])
+
+    # Post-process: if host is a plain name (not a mapping), use it for the first speaker
+    clean_host = _clean_text(host)
+    if clean_host and not _parse_explicit_speaker_mappings(host):
+        first_label = labels[0] if labels else None
+        if first_label and _is_generic_speaker_label(result.get(first_label, "")):
+            result[first_label] = clean_host
+
     return result
 
 
@@ -604,8 +683,9 @@ def generate_podcast_note(
         "source_metadata": source_metadata,
         "output_contract": output_contract,
         "speaker_notes": [
-            "If host/guest names include mappings such as SPEAKER_00=姓名, apply them.",
-            "If no reliable speaker name is available, use speaker1, speaker2, ... exactly as supplied in speaker_name_map.",
+            "If host/guest names include mappings such as SPEAKER_00=姓名 or Speaker 1=Alice, apply them strictly.",
+            "If the speaker_name_map has only speaker1, speaker2 generic labels, use them as-is without inventing real names.",
+            "The first speaker in the transcript is typically the host unless host metadata says otherwise.",
         ],
         "transcript": _segment_lines(segments, speaker_name_map),
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",

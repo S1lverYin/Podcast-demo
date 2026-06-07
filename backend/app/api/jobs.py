@@ -87,6 +87,7 @@ def upload_file(
     language: str | None = Form(default="auto"),
     enable_diarization: bool = Form(default=True),
     enable_translation: bool = Form(default=False),
+    m1_optimized: bool = Form(default=False),
     db: Session = Depends(get_db),
 ) -> JobQueuedResponse:
     """Create a transcription job from an uploaded local media file."""
@@ -97,6 +98,7 @@ def upload_file(
         language=language_value,
         enable_diarization=enable_diarization,
         enable_translation=enable_translation,
+        m1_optimized=m1_optimized,
         status="queued",
     )
     db.add(job)
@@ -148,6 +150,7 @@ def create_from_url(
         language=payload.language,
         enable_diarization=payload.enable_diarization,
         enable_translation=payload.enable_translation,
+        m1_optimized=payload.m1_optimized,
         status="queued",
     )
     db.add(job)

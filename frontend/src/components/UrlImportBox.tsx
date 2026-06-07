@@ -24,6 +24,7 @@ export default function UrlImportBox({ options, onCreated }: Props) {
         language: options.language,
         enable_diarization: options.enableDiarization,
         enable_translation: options.enableTranslation,
+        m1_optimized: options.m1Optimized,
       });
       onCreated(response.job_id);
     } catch (err) {

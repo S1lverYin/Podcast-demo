@@ -47,3 +47,10 @@ def _migrate_sqlite() -> None:
     with engine.begin() as connection:
         if "translated_text" not in columns:
             connection.execute(text("ALTER TABLE transcript_segments ADD COLUMN translated_text TEXT"))
+
+    if "jobs" not in table_names:
+        return
+    job_columns = {column["name"] for column in inspector.get_columns("jobs")}
+    with engine.begin() as connection:
+        if "m1_optimized" not in job_columns:
+            connection.execute(text("ALTER TABLE jobs ADD COLUMN m1_optimized BOOLEAN NOT NULL DEFAULT 0"))

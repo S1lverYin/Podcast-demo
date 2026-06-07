@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Languages, Mic2, Sparkles } from "lucide-react";
+import { Cpu, Languages, Mic2, Sparkles } from "lucide-react";
 
 import UploadBox from "../components/UploadBox";
 import UrlImportBox from "../components/UrlImportBox";
@@ -21,15 +21,16 @@ export default function HomePage() {
   const [language, setLanguage] = useState("auto");
   const [enableDiarization, setEnableDiarization] = useState(true);
   const [enableTranslation, setEnableTranslation] = useState(false);
+  const [m1Optimized, setM1Optimized] = useState(false);
 
   const options = useMemo(
-    () => ({ language, enableDiarization, enableTranslation }),
-    [enableDiarization, enableTranslation, language],
+    () => ({ language, enableDiarization, enableTranslation, m1Optimized }),
+    [enableDiarization, enableTranslation, language, m1Optimized],
   );
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 rounded-md border border-slate-200 bg-white p-5 shadow-sm lg:grid-cols-3">
+      <section className="grid gap-4 rounded-md border border-slate-200 bg-white p-5 shadow-sm lg:grid-cols-4">
         <div>
           <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
             <Languages size={16} aria-hidden="true" />
@@ -77,6 +78,22 @@ export default function HomePage() {
               Translation
             </span>
             <span className="text-xs text-slate-500">英转中；支持 local 或 API 模式</span>
+          </span>
+        </label>
+
+        <label className="flex min-h-20 items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-4">
+          <input
+            className="h-4 w-4 accent-amber-600"
+            type="checkbox"
+            checked={m1Optimized}
+            onChange={(event) => setM1Optimized(event.target.checked)}
+          />
+          <span>
+            <span className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+              <Cpu size={16} aria-hidden="true" />
+              M1 优化
+            </span>
+            <span className="text-xs text-amber-700">small 模型 + int8 量化 · M1/M2 提速 5-10x</span>
           </span>
         </label>
       </section>

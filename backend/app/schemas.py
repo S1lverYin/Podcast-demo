@@ -45,6 +45,7 @@ class UrlJobRequest(BaseModel):
     language: str = "auto"
     enable_diarization: bool = True
     enable_translation: bool = False
+    m1_optimized: bool = False
 
     @field_validator("language")
     @classmethod
@@ -72,6 +73,7 @@ class JobRead(BaseModel):
     language: str
     enable_diarization: bool
     enable_translation: bool
+    m1_optimized: bool
     error_message: str | None = None
     warning_message: str | None = None
     created_at: datetime

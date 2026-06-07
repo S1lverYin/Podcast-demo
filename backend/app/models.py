@@ -22,6 +22,7 @@ class Job(Base):
     language = Column(String, nullable=False, default="auto")
     enable_diarization = Column(Boolean, nullable=False, default=True)
     enable_translation = Column(Boolean, nullable=False, default=False)
+    m1_optimized = Column(Boolean, nullable=False, default=False)
     error_message = Column(Text, nullable=True)
     warning_message = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
