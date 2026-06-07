@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     paragraphing_api_max_sentences: int = Field(default=220, alias="PARAGRAPHING_API_MAX_SENTENCES")
     paragraphing_split_on_speaker: bool = Field(default=True, alias="PARAGRAPHING_SPLIT_ON_SPEAKER")
     max_upload_mb: int = Field(default=2048, alias="MAX_UPLOAD_MB")
+
+    diarization_api_provider: str = Field(default="openai", alias="DIARIZATION_API_PROVIDER")
+    diarization_api_base_url: str = Field(default="https://api.openai.com/v1", alias="DIARIZATION_API_BASE_URL")
+    diarization_api_key: str | None = Field(default=None, alias="DIARIZATION_API_KEY")
+    diarization_api_model: str | None = Field(default=None, alias="DIARIZATION_API_MODEL")
+
     podcast_subscription_csv: str = Field(default="./app/data/subscriptions.csv", alias="PODCAST_SUBSCRIPTION_CSV")
     run_tasks_inline: bool = Field(default=False, alias="RUN_TASKS_INLINE")
 

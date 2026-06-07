@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, Save, X } from "lucide-react";
 
 import { getApiError } from "../api/client";
-import { getParagraphSettings, updateParagraphSettings } from "../api/settings";
+import { getDiarizationSettings, getParagraphSettings, updateDiarizationSettings, updateParagraphSettings } from "../api/settings";
 import SubscriptionSourcesPanel from "../components/SubscriptionSourcesPanel";
 import type { ParagraphingMode } from "../types/job";
 
@@ -107,13 +107,33 @@ export default function SettingsDialog({ open, onClose }: Props) {
   const [initialPrompt, setInitialPrompt] = useState("");
   const [splitOnSpeaker, setSplitOnSpeaker] = useState(true);
   const [clearApiKey, setClearApiKey] = useState(false);
+  const [diarizationProvider, setDiarizationProvider] = useState<ApiProvider>("openai");
+  const [diarizationBaseUrl, setDiarizationBaseUrl] = useState("https://api.openai.com/v1");
+  const [diarizationModel, setDiarizationModel] = useState("");
+  const [diarizationApiKey, setDiarizationApiKey] = useState("");
+  const [diarizationClearKey, setDiarizationClearKey] = useState(false);
   const [modelPreset, setModelPreset] = useState("custom");
+
+  const diarizationQuery = useQuery({
+    queryKey: ["diarization-settings"],
+    queryFn: getDiarizationSettings,
+    enabled: open,
+  });
 
   const settingsQuery = useQuery({
     queryKey: ["paragraph-settings"],
     queryFn: getParagraphSettings,
     enabled: open,
   });
+
+  useEffect(() => {
+    if (!diarizationQuery.data) return;
+    setDiarizationProvider(diarizationQuery.data.diarization_api_provider);
+    setDiarizationBaseUrl(diarizationQuery.data.diarization_api_base_url);
+    setDiarizationModel(diarizationQuery.data.diarization_api_model ?? "");
+    setDiarizationApiKey("");
+    setDiarizationClearKey(false);
+  }, [diarizationQuery.data]);
 
   useEffect(() => {
     if (!settingsQuery.data) return;
@@ -138,6 +158,22 @@ export default function SettingsDialog({ open, onClose }: Props) {
       )?.value ?? "custom",
     );
   }, [settingsQuery.data]);
+
+  const diarizationMutation = useMutation({
+    mutationFn: () =>
+      updateDiarizationSettings({
+        diarization_api_provider: diarizationProvider,
+        diarization_api_base_url: diarizationBaseUrl,
+        diarization_api_model: diarizationModel,
+        diarization_api_key: diarizationApiKey,
+        clear_diarization_api_key: diarizationClearKey,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["diarization-settings"] });
+      setDiarizationApiKey("");
+      setDiarizationClearKey(false);
+    },
+  });
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -165,6 +201,9 @@ export default function SettingsDialog({ open, onClose }: Props) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     updateMutation.mutate();
+    if (diarizationApiKey || diarizationClearKey || diarizationProvider) {
+      diarizationMutation.mutate();
+    }
   }
 
   function handlePresetChange(value: string) {
@@ -369,6 +408,69 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
             <div className="border-t border-slate-100 px-5 py-4">
               <SubscriptionSourcesPanel />
+            {/* Speaker Diarization API */}
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-2">说话人分离 API（可选）</h3>
+              <p className="text-xs text-slate-500 mb-3">
+                专用于说话人分离的 LLM API。留空则复用上方的 LLM 分段设置。
+              </p>
+
+              <label className="block text-sm font-medium text-slate-700">
+                API 类型
+                <select
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  value={diarizationProvider}
+                  onChange={(event) => setDiarizationProvider(event.target.value as ApiProvider)}
+                >
+                  <option value="openai">OpenAI-compatible</option>
+                  <option value="anthropic">Anthropic Messages</option>
+                </select>
+              </label>
+
+              <label className="block text-sm font-medium text-slate-700 mt-3">
+                API Base URL
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder="https://api.deepseek.com"
+                  value={diarizationBaseUrl}
+                  onChange={(event) => setDiarizationBaseUrl(event.target.value)}
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-slate-700 mt-3">
+                Model
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder="deepseek-v4-pro"
+                  value={diarizationModel}
+                  onChange={(event) => setDiarizationModel(event.target.value)}
+                />
+              </label>
+
+              <label className="block text-sm font-medium text-slate-700 mt-3">
+                API Key
+                <input
+                  className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  placeholder={diarizationQuery.data?.diarization_api_key_configured ? "已配置，留空不修改" : "sk-..."}
+                  type="password"
+                  value={diarizationApiKey}
+                  onChange={(event) => setDiarizationApiKey(event.target.value)}
+                />
+              </label>
+
+              {diarizationQuery.data?.diarization_api_key_configured ? (
+                <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    className="h-4 w-4 accent-rose-600"
+                    type="checkbox"
+                    checked={diarizationClearKey}
+                    onChange={(event) => setDiarizationClearKey(event.target.checked)}
+                  />
+                  清除已保存 Key
+                </label>
+              ) : null}
+            </div>
+
             </div>
 
             <div className="shrink-0 flex justify-end gap-2 border-t border-slate-200 px-5 py-3">

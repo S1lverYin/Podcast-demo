@@ -217,6 +217,22 @@ class ParagraphSettingsUpdate(BaseModel):
     clear_paragraphing_api_key: bool = False
 
 
+
+
+class DiarizationSettingsRead(BaseModel):
+    diarization_api_provider: Literal["openai", "anthropic"]
+    diarization_api_base_url: str
+    diarization_api_model: str | None = None
+    diarization_api_key_configured: bool
+
+
+class DiarizationSettingsUpdate(BaseModel):
+    diarization_api_provider: Literal["openai", "anthropic"] | None = None
+    diarization_api_base_url: str | None = None
+    diarization_api_key: str | None = None
+    diarization_api_model: str | None = None
+    clear_diarization_api_key: bool = False
+
 class PodcastSubscriptionRead(BaseModel):
     channel_id: str
     url: str

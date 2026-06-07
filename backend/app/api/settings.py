@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter
 
 from app.config import get_settings
-from app.schemas import ParagraphSettingsRead, ParagraphSettingsUpdate
+from app.schemas import DiarizationSettingsRead, DiarizationSettingsUpdate, ParagraphSettingsRead, ParagraphSettingsUpdate
 
 
 router = APIRouter()
@@ -38,6 +38,45 @@ def _write_env_values(values: dict[str, str]) -> None:
     ENV_PATH.write_text("\n".join(updated_lines).rstrip() + "\n", encoding="utf-8")
     ENV_PATH.chmod(0o600)
     get_settings.cache_clear()
+
+
+
+def _diarization_settings_read() -> DiarizationSettingsRead:
+    settings = get_settings()
+    provider = settings.diarization_api_provider.lower().strip()
+    if provider not in {"openai", "anthropic"}:
+        provider = "openai"
+    return DiarizationSettingsRead(
+        diarization_api_provider=provider,
+        diarization_api_base_url=settings.diarization_api_base_url,
+        diarization_api_model=settings.diarization_api_model,
+        diarization_api_key_configured=bool(settings.diarization_api_key),
+    )
+
+
+@router.get("/diarization", response_model=DiarizationSettingsRead)
+def get_diarization_settings() -> DiarizationSettingsRead:
+    """Return diarization settings without exposing secrets."""
+    return _diarization_settings_read()
+
+
+@router.put("/diarization", response_model=DiarizationSettingsRead)
+def update_diarization_settings(payload: DiarizationSettingsUpdate) -> DiarizationSettingsRead:
+    """Persist diarization settings to the local .env file."""
+    values: dict[str, str] = {}
+    if payload.diarization_api_provider is not None:
+        values["DIARIZATION_API_PROVIDER"] = payload.diarization_api_provider
+    if payload.diarization_api_base_url is not None:
+        values["DIARIZATION_API_BASE_URL"] = payload.diarization_api_base_url.strip()
+    if payload.diarization_api_model is not None:
+        values["DIARIZATION_API_MODEL"] = payload.diarization_api_model.strip()
+    if payload.clear_diarization_api_key:
+        values["DIARIZATION_API_KEY"] = ""
+    elif payload.diarization_api_key and payload.diarization_api_key.strip():
+        values["DIARIZATION_API_KEY"] = payload.diarization_api_key.strip()
+    if values:
+        _write_env_values(values)
+    return _diarization_settings_read()
 
 
 def _settings_read() -> ParagraphSettingsRead:

@@ -31,12 +31,16 @@ def _patch_hf_hub_download():
 
 def _llm_diarize(segments_text, provider, base_url, api_key, model):
     system_prompt = (
-        "You are a speaker diarization assistant. Given transcript segments, "
-        "identify which speaker is speaking in each segment. "
-        "Look for: introductions, turn-taking, topics, speaking style. "
-        'Return ONLY: {"segments":[{"start":0.0,"end":5.0,"speaker":"Speaker A"},...]}. '
-        "Keep ALL original start/end values. Assign consistent speaker labels."
-    )
+    "You are a precise speaker diarization system. "
+    "Given transcript segments, assign the correct speaker name to each segment. "
+    "1. Extract REAL names from self-introductions (e.g. I am John Smith, CEO of...), NOT generic Speaker A. "
+    "2. If no name found, use a role label like Host, Interviewer, Guest, Expert. "
+    "3. Maintain CONSISTENT labels for the same person across all segments. "
+    "4. Look for turn-taking and question-answer patterns. "
+    '5. Return ONLY a JSON object: {"segments":[{"start":0.0,"end":5.0,"speaker":"Name"},...]}. '
+    "6. Include every input segment, do not skip or reorder. "
+    "7. Keep original start/end values exactly."
+)
 
     items = [
         {"id": i, "start": round(s["start"], 2), "end": round(s["end"], 2), "text": s["text"]}
@@ -159,12 +163,12 @@ def diarize_audio(audio_path, transcript_hint=None):
 
     # LLM fallback
     if transcript_hint and len(transcript_hint) >= 2:
-        provider = settings.paragraphing_api_provider.lower().strip()
+        provider = (settings.diarization_api_provider or settings.paragraphing_api_provider).lower().strip()
         if provider not in {"openai", "anthropic"}:
             provider = "openai"
-        base_url = (settings.paragraphing_api_base_url or settings.translation_api_base_url).rstrip("/")
-        api_key = settings.paragraphing_api_key or settings.translation_api_key
-        model = settings.paragraphing_api_model or settings.translation_api_model
+        base_url = (settings.diarization_api_base_url or settings.paragraphing_api_base_url or settings.translation_api_base_url).rstrip("/")
+        api_key = settings.diarization_api_key or settings.paragraphing_api_key or settings.translation_api_key
+        model = settings.diarization_api_model or settings.paragraphing_api_model or settings.translation_api_model
 
         if api_key and model:
             logger.info("Using LLM diarization fallback")
