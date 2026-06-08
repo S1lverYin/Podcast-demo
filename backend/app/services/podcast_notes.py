@@ -12,7 +12,7 @@ from app import models
 
 logger = logging.getLogger(__name__)
 from app.config import get_settings
-from app.services.downloader import _site_options, validate_public_http_url, yt_dlp_command
+from app.services.downloader import _anti_bot_options, validate_public_http_url, yt_dlp_command
 
 
 @dataclass
@@ -482,7 +482,7 @@ def _fetch_source_metadata(source_url: str | None) -> dict[str, Any]:
         "--skip-download",
         "--no-playlist",
         "--no-warnings",
-        *_site_options(url),
+        *_anti_bot_options(url),
         url,
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=90)

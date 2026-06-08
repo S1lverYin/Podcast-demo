@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
 
+from app.config import get_settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,23 +53,46 @@ def _is_bilibili_url(url: str) -> bool:
     return host.endswith("bilibili.com") or host.endswith("b23.tv")
 
 
-def _site_options(url: str) -> list[str]:
-    """Return conservative site-specific yt-dlp options."""
-    if not _is_bilibili_url(url):
-        return []
-    return [
-        "--user-agent",
-        BROWSER_USER_AGENT,
-        "--referer",
-        "https://www.bilibili.com/",
-        "--add-header",
-        "Origin:https://www.bilibili.com",
-        "--add-header",
-        "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8",
-        "--extractor-retries",
-        "3",
-        "--force-ipv4",
+def _anti_bot_options(url: str) -> list[str]:
+    """Return general anti-bot yt-dlp options, plus site-specific extras.
+
+    Applies user-agent, retries, rate-limiting, proxy and cookie settings from the
+    application configuration.  Bilibili URLs additionally receive referer/origin
+    headers that the platform requires.
+    """
+    settings = get_settings()
+    user_agent = settings.ytdlp_user_agent or BROWSER_USER_AGENT
+    retries = str(max(1, settings.ytdlp_retries))
+
+    opts: list[str] = [
+        "--user-agent", user_agent,
+        "--extractor-retries", retries,
+        "--retries", retries,
     ]
+
+    if settings.ytdlp_sleep_interval > 0:
+        opts.extend(["--sleep-interval", str(settings.ytdlp_sleep_interval)])
+    if settings.ytdlp_max_sleep > 0:
+        opts.extend(["--max-sleep", str(settings.ytdlp_max_sleep)])
+    if settings.ytdlp_proxy:
+        opts.extend(["--proxy", settings.ytdlp_proxy])
+    if settings.ytdlp_cookies_file:
+        opts.extend(["--cookies", settings.ytdlp_cookies_file])
+
+    # Bilibili extra headers — the platform frequently rejects non-browser requests
+    if _is_bilibili_url(url):
+        opts.extend([
+            "--referer", "https://www.bilibili.com/",
+            "--add-header", "Origin:https://www.bilibili.com",
+            "--add-header", "Accept-Language:zh-CN,zh;q=0.9,en;q=0.8",
+            "--force-ipv4",
+        ])
+
+    return opts
+
+
+# Backward-compatible alias
+_site_options = _anti_bot_options
 
 
 def download_audio_from_url(url: str, output_dir: str) -> str:
@@ -92,7 +117,7 @@ def download_audio_from_url(url: str, output_dir: str) -> str:
         "0",
         "-o",
         output_template,
-        *_site_options(url),
+        *_anti_bot_options(url),
         url,
     ]
     logger.info("Downloading URL audio with yt-dlp: %s", url)

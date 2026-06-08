@@ -1,13 +1,16 @@
 import json
+import random
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
 import httpx
 
+from app.config import get_settings
 from app.schemas import TranscriptSegment
-from app.services.downloader import _site_options, validate_public_http_url, yt_dlp_command
+from app.services.downloader import _anti_bot_options, BROWSER_USER_AGENT, validate_public_http_url, yt_dlp_command
 from app.services.transcript_correction import (
     _anthropic_completion,
     _api_config,
@@ -47,7 +50,7 @@ def _run_metadata(url: str) -> dict[str, Any]:
         "--skip-download",
         "--no-warnings",
         "--no-playlist",
-        *_site_options(url),
+        *_anti_bot_options(url),
         url,
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=90)
@@ -84,10 +87,46 @@ def _subtitle_candidates(raw: dict[str, Any], language: str | None) -> list[dict
 
 
 def _fetch_text(url: str) -> str:
-    with httpx.Client(timeout=60, follow_redirects=True) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        return response.text
+    """Fetch subtitle text with browser headers, retry, and backoff.
+
+    YouTube CDN servers may reject requests that lack a plausible User-Agent,
+    Referer, or Accept-Language header.  On 429 / 403 we retry with exponential
+    backoff + jitter; connection errors also retry.
+    """
+    settings = get_settings()
+    headers = {
+        "User-Agent": settings.ytdlp_user_agent or BROWSER_USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
+        "Referer": "https://www.youtube.com/",
+    }
+    retries = max(1, settings.ytdlp_retries)
+    proxy = settings.http_proxy or None
+    last_exc: Exception | None = None
+
+    for attempt in range(retries + 1):
+        try:
+            with httpx.Client(
+                timeout=60,
+                follow_redirects=True,
+                headers=headers,
+                proxy=proxy,
+            ) as client:
+                response = client.get(url)
+                response.raise_for_status()
+                return response.text
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (429, 403) and attempt < retries:
+                delay = (2 ** attempt) + random.uniform(0, 1)
+                time.sleep(delay)
+                continue
+            raise
+        except httpx.RequestError as exc:
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(1 + random.uniform(0, 2))
+                continue
+    raise last_exc  # type: ignore[misc]
 
 
 def _parse_json3(payload: str, language: str | None) -> list[TranscriptSegment]:

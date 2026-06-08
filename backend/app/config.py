@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     podcast_subscription_csv: str = Field(default="./app/data/subscriptions.csv", alias="PODCAST_SUBSCRIPTION_CSV")
     run_tasks_inline: bool = Field(default=False, alias="RUN_TASKS_INLINE")
 
+    # Anti-scraping / anti-bot settings for yt-dlp and httpx
+    ytdlp_proxy: str | None = Field(default=None, alias="YTDLP_PROXY")
+    ytdlp_cookies_file: str | None = Field(default=None, alias="YTDLP_COOKIES_FILE")
+    ytdlp_user_agent: str | None = Field(default=None, alias="YTDLP_USER_AGENT")
+    ytdlp_sleep_interval: int = Field(default=2, alias="YTDLP_SLEEP_INTERVAL")
+    ytdlp_max_sleep: int = Field(default=8, alias="YTDLP_MAX_SLEEP")
+    ytdlp_retries: int = Field(default=5, alias="YTDLP_RETRIES")
+    http_proxy: str | None = Field(default=None, alias="HTTP_PROXY")
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",

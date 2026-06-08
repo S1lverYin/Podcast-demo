@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 from app.config import get_settings
-from app.services.downloader import _site_options, validate_public_http_url, yt_dlp_command
+from app.services.downloader import _anti_bot_options, validate_public_http_url, yt_dlp_command
 from app.services.podcast_notes import (
     _anthropic_completion,
     _api_config,
@@ -86,9 +86,8 @@ def _run_ytdlp_json(target: str, *, timeout: int = 90, site_url: str | None = No
         "--skip-download",
         "--no-warnings",
         "--no-playlist",
+        *_anti_bot_options(site_url or target),
     ]
-    if site_url:
-        command.extend(_site_options(site_url))
     command.append(target)
     result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
     if result.returncode != 0:
@@ -104,6 +103,7 @@ def _run_ytdlp_playlist_json(target: str, *, timeout: int = 120, playlist_end: i
         "--no-warnings",
         "--playlist-end",
         str(playlist_end),
+        *_anti_bot_options(target),
         target,
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
